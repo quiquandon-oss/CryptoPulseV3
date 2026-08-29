@@ -604,45 +604,239 @@ const SEED_TXS=[{"date":"2026-04-11","asset":"BTC","acct":"Neverless","type":"bu
     </section>
 
     <!-- =============== SCENARIO =============== -->
-    <section id="v-scenario" class="hidden space-y-4">
+    <section id="v-scenario" class="hidden space-y-5">
       <div id="scenReviewBanner"></div>
-      <div class="rounded-2xl border border-line bg-panel p-4 sm:p-5">
-        <div class="flex items-start justify-between mb-3">
-          <div><h2 class="font-semibold flex items-center gap-2">Portfolio Scenarios<span id="dotPortfolioScenarios" title="—" style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:#94A3B8;margin-left:6px;vertical-align:middle;"></span> <button class="text-[10px] text-mutet hover:text-white border border-line rounded-md px-2 py-1 font-normal" onclick="toggleNote(this,'scenGrowthNote')">ⓘ Info</button></h2><p class="text-xs text-mutet mt-0.5">2019–2024 market cycles · not financial advice</p></div>
-          <button id="scenExpandBtn" class="px-2 py-1 rounded-md text-mutet hover:text-white shrink-0" title="Fullscreen" onclick="openScenFanFullscreen()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+
+      <!-- REDESIGN HEADER -->
+      <div class="flex items-center justify-between pb-1">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+            Scenario Growth Comparison
+            <span id="dotPortfolioScenarios" title="—" style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:#94A3B8;"></span>
+          </h2>
+          <p class="text-xs text-mutet mt-0.5">Simulate growth outcomes across Bullish, Neutral, & Bearish market trajectories</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="scenExpandBtn" class="p-2 rounded-xl bg-panel2 border border-line text-mutet hover:text-white transition" title="Fullscreen Chart" onclick="openScenFanFullscreen()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+          </button>
+          <button class="p-2 rounded-xl bg-panel2 border border-line text-mutet hover:text-white transition text-xs font-medium" onclick="toggleNote(this,'scenTextNotes')">
+            ⓘ Details
           </button>
         </div>
-        <!-- FIX: Break-even used to live in a narrow shrink-0 side column
-             next to the title, on the same row. Once the crossing-date
-             text got longer ("+57% needed to break even — around DD/MM/
-             YYYY"), that column had no room to wrap it and it overflowed
-             past the right edge of the screen. Full-width row instead, so
-             the text wraps naturally. -->
-        <div class="mb-4">
-          <p class="text-[10px] uppercase tracking-wide text-mutet">Break-even</p>
-          <div class="flex items-baseline gap-2 flex-wrap">
-            <p class="grot font-bold tnum" id="scBeqVal">—</p>
-            <p class="text-[10px]" id="scBeqNeed">—</p>
-          </div>
-        </div>
-        <div class="flex items-center justify-between mb-1.5">
-          <button class="text-[10px] text-mutet hover:text-white border border-line rounded-md px-2 py-1" onclick="toggleNote(this,'scenTextNotes')">ⓘ Details</button>
-          <button id="scenZoomReset" class="hidden text-[10px] font-semibold text-mutet bg-panel2 hover:bg-line border border-line rounded-lg px-2 py-1 transition">↺ Reset zoom</button>
-        </div>
-        <div id="scenTextNotes" class="hidden mb-1.5">
-          <p id="scenMacroContext" class="text-[10px] text-mutet mb-1"></p>
-          <p id="scenSigmaNote" class="text-[10px] text-mutet mb-1"></p>
-          <p class="text-[10px] text-mutet">🤏 pinch / scroll / drag to zoom · compare vs break-even</p>
-        </div>
-        <div class="h-[1360px] sm:h-[1640px]"><canvas id="scenChart"></canvas></div>
       </div>
 
-      <!-- Fullscreen scenario fan chart overlay: own Chart.js instance, same
-           pattern as the Cycles fan chart and the Sentiment history chart. -->
+      <!-- DETAILS DISCLOSURE (COLLAPSIBLE) -->
+      <div id="scenTextNotes" class="hidden rounded-2xl border border-line bg-panel p-4 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-semibold text-white">Scenario Methodology & Details</p>
+          <button id="scenZoomReset" class="hidden text-[10px] font-semibold text-mutet bg-panel2 hover:bg-line border border-line rounded-lg px-2 py-1 transition">↺ Reset zoom</button>
+        </div>
+        <p id="scenMacroContext" class="text-[11px] text-mutet"></p>
+        <p id="scenSigmaNote" class="text-[11px] text-mutet"></p>
+        <p class="text-[11px] text-mutet">🤏 pinch / scroll / drag to zoom · compare vs break-even</p>
+        <div class="pt-1 border-t border-line/50">
+          <p class="text-[10px] uppercase tracking-wide text-mutet">Break-even status</p>
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <p class="grot font-bold tnum text-sm" id="scBeqVal">—</p>
+            <p class="text-xs" id="scBeqNeed">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- HYPOTHETICAL INVESTMENT CARD -->
+      <div class="rounded-2xl border border-line bg-panel p-4 sm:p-6 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-mutet flex items-center gap-2">
+            <svg class="w-4 h-4 text-neon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Hypothetical Investment
+          </h3>
+          <span class="text-[11px] text-mutet bg-panel2 px-2.5 py-1 rounded-full border border-line/60">Calculator & Growth Projection</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Asset Selector -->
+          <div>
+            <label class="block text-xs font-medium text-mutet mb-1.5">Select Asset / Focus</label>
+            <div class="relative">
+              <select id="scenCalcAssetSelect" class="w-full bg-panel2 border border-line rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-neon transition cursor-pointer appearance-none pr-8" onchange="renderScenarioCalculator()">
+                <option value="PORTFOLIO">💼 Entire Portfolio Total</option>
+                <option value="BTC" selected>₿ Bitcoin (BTC)</option>
+                <option value="ETH">Ξ Ethereum (ETH)</option>
+                <option value="SOL">◎ Solana (SOL)</option>
+                <option value="BNB">❖ Binance Coin (BNB)</option>
+                <option value="XRP">✕ XRP (XRP)</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-mutet">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Amount Input -->
+          <div>
+            <label class="block text-xs font-medium text-mutet mb-1.5">Investment Amount</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-bold text-mutet">$</span>
+              <input type="number" id="scenCalcAmount" value="10000" min="1" step="100" class="w-full bg-panel2 border border-line rounded-xl pl-8 pr-3 py-2.5 text-sm font-bold text-white outline-none focus:border-neon transition" oninput="renderScenarioCalculator()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Presets -->
+        <div class="flex items-center gap-2 flex-wrap pt-1">
+          <span class="text-[11px] text-mutet font-medium mr-1">Quick Presets:</span>
+          <button type="button" class="px-2.5 py-1 rounded-lg bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white hover:border-neon/50 transition" onclick="setScenCalcAmount(1000)">$1,000</button>
+          <button type="button" class="px-2.5 py-1 rounded-lg bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white hover:border-neon/50 transition" onclick="setScenCalcAmount(5000)">$5,000</button>
+          <button type="button" class="px-2.5 py-1 rounded-lg bg-panel2 border border-line text-xs font-semibold text-neon border-neon/40 hover:text-white transition" onclick="setScenCalcAmount(10000)">$10,000</button>
+          <button type="button" class="px-2.5 py-1 rounded-lg bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white hover:border-neon/50 transition" onclick="setScenCalcAmount(25000)">$25,000</button>
+          <button type="button" class="px-2.5 py-1 rounded-lg bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white hover:border-neon/50 transition" onclick="setScenCalcAmount(50000)">$50,000</button>
+        </div>
+      </div>
+
+      <!-- SCENARIO GROWTH CHART CONTAINER -->
+      <div class="rounded-2xl border border-line bg-panel p-4 sm:p-6 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-mutet">Scenario Growth Chart</h3>
+          </div>
+          <!-- Legend Pill Badges -->
+          <div class="flex items-center gap-2 flex-wrap text-xs font-medium">
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon/10 border border-neon/30 text-neon">
+              <span class="w-2 h-2 rounded-full bg-neon inline-block"></span> Bullish
+            </span>
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400">
+              <span class="w-2 h-2 rounded-full bg-sky-400 inline-block"></span> Neutral
+            </span>
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-down/10 border border-down/30 text-down">
+              <span class="w-2 h-2 rounded-full bg-down inline-block"></span> Bearish
+            </span>
+          </div>
+        </div>
+
+        <div class="relative w-full h-[280px] sm:h-[360px]">
+          <canvas id="scenChart"></canvas>
+        </div>
+      </div>
+
+      <!-- HORIZON & TARGET DATE SELECTOR -->
+      <div class="rounded-2xl border border-line bg-panel p-4 sm:p-5 space-y-3">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 class="font-bold text-sm text-white">Target Horizon Date</h3>
+            <p class="text-xs text-mutet mt-0.5" id="scenDateHorizon">Select a future evaluation date to calculate target price & values</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" class="px-2.5 py-1.5 rounded-xl bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white transition" onclick="setScenHorizonDate('6M')">6 Months</button>
+            <button type="button" class="px-2.5 py-1.5 rounded-xl bg-panel2 border border-line text-xs font-semibold text-neon border-neon/40 hover:text-white transition" onclick="setScenHorizonDate('2Y')">2 Years</button>
+            <button type="button" class="px-2.5 py-1.5 rounded-xl bg-panel2 border border-line text-xs font-semibold text-mutet hover:text-white transition" onclick="setScenHorizonDate('5Y')">5 Years</button>
+            <input type="date" id="scenDatePicker" class="bg-panel2 border border-line rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-neon cursor-pointer">
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENARIO SELECTOR CARDS (BULLISH, NEUTRAL, BEARISH) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <!-- BULLISH CARD -->
+        <div class="rounded-2xl border border-neon/40 bg-gradient-to-b from-neon/10 via-panel to-panel p-4 sm:p-5 space-y-3 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-neon flex items-center gap-1.5">
+              📈 Bullish Scenario
+            </span>
+            <span id="scenCalcBullRoi" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-neon text-ink">
+              +141.5%
+            </span>
+          </div>
+
+          <div>
+            <p class="text-[11px] text-mutet font-medium uppercase tracking-wide">Target Price</p>
+            <p id="scenCalcBullTargetPrice" class="text-xl sm:text-2xl font-black text-white tnum mt-0.5">—</p>
+          </div>
+
+          <div class="pt-2 border-t border-line/60 flex items-center justify-between">
+            <div>
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Potential Value</p>
+              <p id="scenCalcBullVal" class="text-lg font-extrabold text-neon tnum">$24,150</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Vs. Break-even</p>
+              <p id="sc_bull_at_date_pct" class="text-xs font-bold text-neon tnum">+141.5%</p>
+            </div>
+          </div>
+          <span class="hidden" id="sc_bull_at_date"></span>
+        </div>
+
+        <!-- NEUTRAL CARD -->
+        <div class="rounded-2xl border border-sky-500/40 bg-gradient-to-b from-sky-500/10 via-panel to-panel p-4 sm:p-5 space-y-3 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+              ➡️ Neutral Scenario
+            </span>
+            <span id="scenCalcBaseRoi" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-sky-500 text-ink">
+              +52.9%
+            </span>
+          </div>
+
+          <div>
+            <p class="text-[11px] text-mutet font-medium uppercase tracking-wide">Target Price</p>
+            <p id="scenCalcBaseTargetPrice" class="text-xl sm:text-2xl font-black text-white tnum mt-0.5">—</p>
+          </div>
+
+          <div class="pt-2 border-t border-line/60 flex items-center justify-between">
+            <div>
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Potential Value</p>
+              <p id="scenCalcBaseVal" class="text-lg font-extrabold text-sky-400 tnum">$15,290</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Vs. Break-even</p>
+              <p id="sc_base_at_date_pct" class="text-xs font-bold text-sky-400 tnum">+52.9%</p>
+            </div>
+          </div>
+          <span class="hidden" id="sc_base_at_date"></span>
+        </div>
+
+        <!-- BEARISH CARD -->
+        <div class="rounded-2xl border border-down/40 bg-gradient-to-b from-down/10 via-panel to-panel p-4 sm:p-5 space-y-3 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-down flex items-center gap-1.5">
+              📉 Bearish Scenario
+            </span>
+            <span id="scenCalcBearRoi" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-down text-white">
+              -27.6%
+            </span>
+          </div>
+
+          <div>
+            <p class="text-[11px] text-mutet font-medium uppercase tracking-wide">Target Price</p>
+            <p id="scenCalcBearTargetPrice" class="text-xl sm:text-2xl font-black text-white tnum mt-0.5">—</p>
+          </div>
+
+          <div class="pt-2 border-t border-line/60 flex items-center justify-between">
+            <div>
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Potential Value</p>
+              <p id="scenCalcBearVal" class="text-lg font-extrabold text-down tnum">$7,240</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-mutet uppercase tracking-wide">Vs. Break-even</p>
+              <p id="sc_bear_at_date_pct" class="text-xs font-bold text-down tnum">-27.6%</p>
+            </div>
+          </div>
+          <span class="hidden" id="sc_bear_at_date"></span>
+        </div>
+
+      </div>
+
+      <!-- DISCLOSURES & TACTICAL TILT -->
+      <div class="rounded-xl bg-panel2 border border-line p-3 text-xs">
+        <p class="text-[10px] text-mutet" id="scenGrowthNote">Between 6M/2Y/5Y checkpoints, values assume a constant growth rate within each segment based on 2019–2024 historical market cycles.</p>
+        <p class="text-[10px] mt-1" id="scenTacticalTilt"></p>
+      </div>
+
+      <!-- FULLSCREEN OVERLAY (PRESERVED) -->
       <div id="scenChartFullscreen" class="hidden fixed inset-0 z-50 bg-panel p-4 flex flex-col">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold">Portfolio Scenarios</h3>
+          <h3 class="text-sm font-semibold text-white">Portfolio Scenarios</h3>
           <div class="flex items-center gap-2">
             <button class="px-2.5 py-1.5 rounded-md text-xs text-mutet hover:text-white border border-line" onclick="resetScenFanFullscreenZoom()">Reset zoom</button>
             <button class="px-2.5 py-1.5 rounded-md text-xs bg-panel2 hover:text-white border border-line" onclick="closeScenFanFullscreen()">✕ Close</button>
@@ -650,36 +844,8 @@ const SEED_TXS=[{"date":"2026-04-11","asset":"BTC","acct":"Neverless","type":"bu
         </div>
         <div class="flex-1"><canvas id="scenChartFull"></canvas></div>
       </div>
-      <div class="rounded-2xl border border-line bg-panel p-4 sm:p-5">
-        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <h2 class="font-semibold text-sm">Scenario at a specific date</h2>
-          <input type="date" id="scenDatePicker" class="bg-panel2 border border-line rounded-lg px-2 py-1.5 text-xs text-white">
-        </div>
-        <p class="text-[10px] text-mutet mb-3" id="scenDateHorizon">—</p>
-        <div class="grid grid-cols-3 gap-2">
-          <div class="rounded-2xl border border-down/30 bg-panel2 p-3">
-            <p class="text-[11px] font-bold text-down mb-2">📉 BEAR</p>
-            <p class="font-bold tnum text-down text-sm" id="sc_bear_at_date">—</p>
-            <p class="text-[10px] text-mutet mt-1" id="sc_bear_at_date_pct">—</p>
-          </div>
-          <div class="rounded-2xl border border-line bg-panel2 p-3">
-            <p class="text-[11px] font-bold text-mutet mb-2">➡️ BASE</p>
-            <p class="font-bold tnum text-sm" id="sc_base_at_date">—</p>
-            <p class="text-[10px] text-mutet mt-1" id="sc_base_at_date_pct">—</p>
-          </div>
-          <div class="rounded-2xl border border-neon/30 bg-panel2 p-3">
-            <p class="text-[11px] font-bold text-up mb-2">📈 BULL</p>
-            <p class="font-bold tnum text-up text-sm" id="sc_bull_at_date">—</p>
-            <p class="text-[10px] text-mutet mt-1" id="sc_bull_at_date_pct">—</p>
-          </div>
-        </div>
-        <p class="hidden text-[10px] text-mutet mt-3" id="scenGrowthNote">Between your 6M/2Y/5Y checkpoints, values assume a constant growth rate within each segment. Beyond 5Y, the last segment's rate is extended forward — a judgment call, not a calibrated forecast.</p>
-        <p class="text-[10px] mt-1" id="scenTacticalTilt"></p>
-      </div>
 
-      <!-- Scenario tracking: scores Bear/Base/Bull against what actually
-           happened, once a baseline exists — flags it if reality has drifted
-           toward one edge instead of Base. -->
+      <!-- TRACKING VS REALITY PANEL (PRESERVED) -->
       <div class="rounded-2xl border border-line bg-panel p-4 sm:p-5">
         <div class="flex items-center justify-between mb-1">
           <h2 class="font-semibold text-sm">Scenario tracking vs. reality<span id="dotScenTracking" title="—" style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:#94A3B8;margin-left:6px;vertical-align:middle;"></span></h2>
@@ -689,7 +855,7 @@ const SEED_TXS=[{"date":"2026-04-11","asset":"BTC","acct":"Neverless","type":"bu
         <div id="scenTrackingPanel" class="text-xs text-mutet">—</div>
       </div>
 
-      <!-- Alert banner (shown when score >= 45) -->
+      <!-- ALERT BANNER -->
       <div id="bottomBanner" class="hidden rounded-xl border px-3 py-2 text-xs font-semibold"></div>
 
       <!-- Break-even probability table -->
@@ -7432,21 +7598,101 @@ function renderScenario(){
   renderProba();
   renderBottomSignal();
 }
+function setScenCalcAmount(amt){
+  const el=$('#scenCalcAmount');
+  if(el){
+    el.value=amt;
+    renderScenarioCalculator();
+  }
+}
+
+function setScenHorizonDate(horizonKey){
+  const inp=$('#scenDatePicker');
+  if(!inp)return;
+  const d=new Date();
+  if(horizonKey==='6M') d.setMonth(d.getMonth()+6);
+  else if(horizonKey==='2Y') d.setFullYear(d.getFullYear()+2);
+  else if(horizonKey==='5Y') d.setFullYear(d.getFullYear()+5);
+  inp.value=d.toISOString().slice(0,10);
+  renderScenarioCalculator();
+}
+
+function renderScenarioCalculator(){
+  const assetSelect=$('#scenCalcAssetSelect');
+  const amountInp=$('#scenCalcAmount');
+  const dateInp=$('#scenDatePicker');
+  if(!dateInp) return;
+
+  if(!dateInp.value){
+    const d=new Date();d.setFullYear(d.getFullYear()+2);
+    dateInp.value=d.toISOString().slice(0,10);
+  }
+
+  const asset=assetSelect?assetSelect.value:'BTC';
+  const investAmt=amountInp?parseFloat(amountInp.value)||10000:10000;
+
+  const target=new Date(dateInp.value+'T00:00:00');
+  const T=Math.max(0,(target-new Date())/(365.25*86400000));
+  const Ts=[0,0.5,2,5];
+
+  const bearFactor=interpScenario(SCEN.bear,Ts,T);
+  const baseFactor=interpScenario(SCEN.base,Ts,T);
+  const bullFactor=interpScenario(SCEN.bull,Ts,T);
+
+  // Calculate Potential Values
+  const bearVal=investAmt*bearFactor;
+  const baseVal=investAmt*baseFactor;
+  const bullVal=investAmt*bullFactor;
+
+  // Calculate ROI %
+  const bearRoi=((bearFactor-1)*100);
+  const baseRoi=((baseFactor-1)*100);
+  const bullRoi=((bullFactor-1)*100);
+
+  // Update Potential Value elements
+  const bearValEl=$('#scenCalcBearVal');if(bearValEl)bearValEl.textContent=money(bearVal);
+  const baseValEl=$('#scenCalcBaseVal');if(baseValEl)baseValEl.textContent=money(baseVal);
+  const bullValEl=$('#scenCalcBullVal');if(bullValEl)bullValEl.textContent=money(bullVal);
+
+  // Update ROI elements
+  const fmtRoi=v=>(v>=0?'+':'')+v.toFixed(1)+'%';
+  const bearRoiEl=$('#scenCalcBearRoi');if(bearRoiEl)bearRoiEl.textContent=fmtRoi(bearRoi);
+  const baseRoiEl=$('#scenCalcBaseRoi');if(baseRoiEl)baseRoiEl.textContent=fmtRoi(baseRoi);
+  const bullRoiEl=$('#scenCalcBullRoi');if(bullRoiEl)bullRoiEl.textContent=fmtRoi(bullRoi);
+
+  // Target Prices
+  let currPrice=0;
+  if(asset==='PORTFOLIO'){
+    currPrice=scenFanLastState?scenFanLastState.cur:totals().val;
+  } else {
+    currPrice=pxUsd(asset)||0;
+  }
+
+  const bearPx=currPrice*bearFactor;
+  const basePx=currPrice*baseFactor;
+  const bullPx=currPrice*bullFactor;
+
+  const bearPxEl=$('#scenCalcBearTargetPrice');if(bearPxEl)bearPxEl.textContent=asset==='PORTFOLIO'?'Portfolio Model':money(bearPx);
+  const basePxEl=$('#scenCalcBaseTargetPrice');if(basePxEl)basePxEl.textContent=asset==='PORTFOLIO'?'Portfolio Model':money(basePx);
+  const bullPxEl=$('#scenCalcBullTargetPrice');if(bullPxEl)bullPxEl.textContent=asset==='PORTFOLIO'?'Portfolio Model':money(bullPx);
+
+  // Tactical tilt note / horizon update
+  const horizonEl=$('#scenDateHorizon');
+  if(horizonEl){
+    const days=Math.round(T*365.25);
+    horizonEl.textContent=T<=0?'Today evaluation':(days+'d from now (~'+T.toFixed(1)+'y)'+(T>5?' — extrapolated beyond 5Y trend':''));
+  }
+}
+
 // ---- Pick-a-date readout: evaluates Bear/Base/Bull at any user-chosen
 // future date via interpScenario(), replacing the old fixed 6M/2Y/5Y cards. ----
 function renderScenarioDateReadout(){
+  renderScenarioCalculator();
   const inp=$('#scenDatePicker');if(!inp)return;
   if(!inp.value){
     const d=new Date();d.setFullYear(d.getFullYear()+1);
     inp.value=d.toISOString().slice(0,10);
   }
-  // FIX: same bug as renderScenario() had — totals().val excludes accrued
-  // interest, which made these date-specific Bear/Base/Bull $ values
-  // inconsistent with both the chart's projection AND the "Actual" history
-  // line's endpoint. Reads the single shared, already-corrected cur from
-  // scenFanLastState instead of recomputing independently. cost is
-  // unaffected by this (interest isn't a cost basis), so it still comes
-  // from totals() as before.
   const cur=scenFanLastState?scenFanLastState.cur:totals().val;
   const cost=totals().cost;
   const target=new Date(inp.value+'T00:00:00');
@@ -7455,19 +7701,13 @@ function renderScenarioDateReadout(){
   const bearVal=cur*interpScenario(SCEN.bear,Ts,T);
   let baseVal=cur*interpScenario(SCEN.base,Ts,T);
   const bullVal=cur*interpScenario(SCEN.bull,Ts,T);
-  // ---- Tactical tilt: a CLEARLY SEPARATE, time-boxed adjustment to the Base
-  // display only — never touches SCEN, never touches the chart, and fully
-  // decays to zero by day 90. This is the "mixed judgment call" done safely:
-  // the structural 6M/2Y/5Y assumption stays exactly what you set; only the
-  // near-term display gets a visible, self-expiring nudge from current
-  // regime conviction, with the math shown so it's never mistaken for a
-  // change to the underlying scenario itself. ----
+
   const tiltEl=$('#scenTacticalTilt');
   const sc=window.__lastRegimeScorecard;
   const tiltHorizonYears=90/365.25;
   if(tiltEl&&sc&&sc.overallMag!=null&&T<tiltHorizonYears&&T>=0){
     const decay=1-(T/tiltHorizonYears);
-    const maxTiltPct=8; // cap: up to +-8% at T=0 with full regime conviction
+    const maxTiltPct=8;
     const tiltPct=sc.overallMag*maxTiltPct*decay;
     baseVal=baseVal*(1+tiltPct/100);
     const daysLeft=Math.round((tiltHorizonYears-T)*365.25);
@@ -7475,18 +7715,13 @@ function renderScenarioDateReadout(){
   }else if(tiltEl){
     tiltEl.textContent=T>=tiltHorizonYears?'Tactical tilt window (90d) has passed for this date — showing your unadjusted structural assumption.':'';
   }
-  $('#sc_bear_at_date').textContent=money(bearVal);
-  $('#sc_base_at_date').textContent=money(baseVal);
-  $('#sc_bull_at_date').textContent=money(bullVal);
+  const bearEl=$('#sc_bear_at_date');if(bearEl)bearEl.textContent=money(bearVal);
+  const baseEl=$('#sc_base_at_date');if(baseEl)baseEl.textContent=money(baseVal);
+  const bullEl=$('#sc_bull_at_date');if(bullEl)bullEl.textContent=money(bullVal);
   const pctOf=v=>{if(!cost)return'';const p=(v-cost)/cost*100;return(p>=0?'+':'')+p.toFixed(0)+'% vs break-even';};
-  $('#sc_bear_at_date_pct').textContent=pctOf(bearVal);
-  $('#sc_base_at_date_pct').textContent=pctOf(baseVal);
-  $('#sc_bull_at_date_pct').textContent=pctOf(bullVal);
-  const horizonEl=$('#scenDateHorizon');
-  if(horizonEl){
-    const days=Math.round(T*365.25);
-    horizonEl.textContent=T<=0?'Today':(days+'d from now (~'+T.toFixed(1)+'y)'+(T>5?' — beyond your 5Y checkpoint, extrapolated from its trend':''));
-  }
+  const bearPctEl=$('#sc_bear_at_date_pct');if(bearPctEl)bearPctEl.textContent=pctOf(bearVal);
+  const basePctEl=$('#sc_base_at_date_pct');if(basePctEl)basePctEl.textContent=pctOf(baseVal);
+  const bullPctEl=$('#sc_bull_at_date_pct');if(bullPctEl)bullPctEl.textContent=pctOf(bullVal);
 }
 function scenZoomStateChanged({chart}){
   const btn=$('#scenZoomReset');if(!btn)return;
