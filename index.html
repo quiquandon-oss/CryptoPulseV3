@@ -1303,54 +1303,41 @@
     </div>
   </div>
 
-  <!-- VIEW 2: LAB TAB -->
+  <!-- VIEW 2: LAB TAB — Experiment Lab (EXP-002, EXP-003 per PulseWorkerV2's -->
+  <!-- .ai/AUGUST_2026_LEARNING_ROADMAP.md §3). Everything here is a parallel- -->
+  <!-- logged research variant; nothing on this tab can change production   -->
+  <!-- selection. Data loads on tab-open and on the header Refresh button   -->
+  <!-- only — no auto-polling. -->
   <div id="view-lab" class="hidden">
-    <p class="text-xs uppercase tracking-wider text-[#4A90E2] font-bold mb-3 mt-4">Challenger — Stable Model</p>
-    <section id="challengerLiveCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <div class="flex items-center justify-between mb-2">
-        <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Challenger — Live Read</p>
-        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'challengerNote')">ⓘ Info</button>
+    <div class="mb-4 mt-4">
+      <p class="text-xs uppercase tracking-wider text-[#4A90E2] font-bold">Experiment Lab</p>
+      <p class="text-xs text-[#718096] mt-0.5">Live progress on parallel-logged research variants from PulseWorkerV2. Nothing here ever changes production selection.</p>
+    </div>
+
+    <!-- EXP-002 -->
+    <section id="exp002Card" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">EXP-002 · Anomaly Gate</p>
+          <span id="exp002Status" class="status-badge status-warning">Loading…</span>
+        </div>
+        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'exp002Note')">ⓘ Info</button>
       </div>
-      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="challengerNote">A separate model. When today is regime-anomalous, this defers to a simple trend-persistence read instead of trusting k-NN in conditions it struggled in. Otherwise defers to k-NN.</p>
-      <div id="challengerLiveBody"><p class="text-xs text-[#718096]">Loading…</p></div>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="exp002Note">Target: tests whether the Bonferroni significance bar is overly strict exactly when the core k-NN model is known to be weakest (regime-anomalous cycles). Logs a softened-margin (×0.5) alternative decision on every anomaly cycle — never changes what production actually selects. Promotion requires ≥3 more independent high-anomaly episodes plus an independent audit.</p>
+      <div id="exp002Body"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
-    <section id="challengerCalibCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <h2 class="text-sm font-bold text-[#1A1A2E] mb-3">Challenger vs. Baselines</h2>
-      <div id="challengerCalibBody"><p class="text-xs text-[#718096]">Loading…</p></div>
-    </section>
-
-    <section id="challengerRecapCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <h2 class="text-sm font-bold text-[#1A1A2E] mb-3">Recent Predictions</h2>
-      <div id="challengerRecapBody" style="max-height:320px;overflow-y:auto"><p class="text-xs text-[#718096]">Loading…</p></div>
-    </section>
-
-    <p class="text-xs uppercase tracking-wider text-[#718096] font-bold mb-3 mt-8">Experimental — undecided design choices</p>
-    <section id="labWeightingCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <div class="flex items-center justify-between mb-2">
-        <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Combined Accuracy — which formula?</p>
-        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labWeightingNote')">ⓘ Info</button>
+    <!-- EXP-003 -->
+    <section id="exp003Card" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">EXP-003 · Momentum Overlay</p>
+          <span id="exp003Status" class="status-badge status-warning">Loading…</span>
+        </div>
+        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'exp003Note')">ⓘ Info</button>
       </div>
-      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="labWeightingNote">Simple average treats all 4 coin/horizon combos equally. Pooled (n-weighted) weights by total resolved count.</p>
-      <div id="labWeightingBody"><p class="text-xs text-[#718096]">Loading…</p></div>
-    </section>
-
-    <section id="labHeroCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <div class="flex items-center justify-between mb-3">
-        <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Hero label — which name?</p>
-        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labHeroNote')">ⓘ Info</button>
-      </div>
-      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="labHeroNote">Cards showing pooled accuracy and live numbers under different hero labels.</p>
-      <div id="labHeroBody" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-    </section>
-
-    <section id="selectedModelCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
-      <div class="flex items-center justify-between mb-2">
-        <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Selected Model — <span id="selectedModelCoinLabel">BTC · 24H</span></p>
-        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'selectedModelNote')">ⓘ Info</button>
-      </div>
-      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="selectedModelNote">Condition-Matched Selection build decision for the active setup.</p>
-      <div id="selectedModelBody" class="text-sm text-[#4A4A5E]">Loading…</div>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="exp003Note">Target: when a cycle is regime-anomalous AND |trend_strength| &gt; 0.5, blends a 20% trend-persistence weight into k-NN's p_up as challenger_momentum — logged only, never selection-eligible. Needs its own 50 resolved rows before eligibility, then the same episode/audit promotion gate as EXP-002.</p>
+      <div id="exp003Body"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
   </div>
 
@@ -1478,6 +1465,7 @@ const MODEL_ORDER = [
 let currentData = { BTC: null, LINK: null, ETH: null };
 let chartInstances = { BTC: null, LINK: null, ETH: null };
 let miniChartInstances = { BTC: null, LINK: null, ETH: null };
+let labChartInstances = { exp002: null, exp003: null };
 let chartDays = { BTC: 7, LINK: 7, ETH: 7 };
 let chartLegendsVisible = { BTC: true, LINK: true, ETH: true };
 let activeView = (location.hash || '').replace('#', '') || 'dashboard';
@@ -2510,41 +2498,260 @@ document.getElementById('refreshBtn').onclick = async () => {
 };
 
 // ============================================================
-// 11. LAB & AI LEARNING TAB COMPATIBILITY
+// 11. EXPERIMENT LAB (EXP-002 anomaly gate, EXP-003 momentum overlay)
 // ============================================================
 
 async function loadLab() {
-  const body = document.getElementById('selectedModelBody');
-  if (body) {
-    body.innerHTML = `<div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
-      <p class="text-xs font-semibold text-[#1A1A2E] mb-1">Active Model Selection Across Assets (24H)</p>
-      <p class="text-xs text-[#718096]">BTC: <strong>${currentData.BTC?.currentModel || 'Condition-Matched'}</strong> · LINK: <strong>${currentData.LINK?.currentModel || 'Challenger Tilted'}</strong> · ETH: <strong>${currentData.ETH?.currentModel || 'k-NN Calibrated'}</strong></p>
-    </div>`;
+  await Promise.all([loadExp002(), loadExp003()]);
+}
+
+function setLabStatus(id, text, kind) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = text;
+    el.className = `status-badge ${kind === 'ok' ? 'status-ok' : 'status-warning'}`;
   }
-  loadChallengerLive();
-  loadChallengerCalib();
 }
 
-async function loadChallengerLive() {
-  const host = document.getElementById('challengerLiveBody');
-  if (!host) return;
-  host.innerHTML = `<div class="text-xs text-[#4A4A5E]">
-    <p class="font-semibold mb-1">Live Multi-Asset Challenger Status</p>
-    <p class="text-[#718096]">Active monitoring enabled for BTC, LINK, and ETH endpoints on 24H horizon.</p>
-  </div>`;
+function fmtLabDate(ts) {
+  return ts ? new Date(ts).toLocaleDateString() : '—';
 }
 
-async function loadChallengerCalib() {
-  const host = document.getElementById('challengerCalibBody');
-  if (!host) return;
-  host.innerHTML = `<table class="w-full text-xs text-[#4A4A5E]">
-    <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]"><th class="py-1">Asset</th><th class="py-1">Active Model</th><th class="py-1">Status</th></tr></thead>
-    <tbody>
-      <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">BTC</td><td>${currentData.BTC?.currentModel || 'Condition-Matched'}</td><td class="text-[#2ECC71]">Active</td></tr>
-      <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">LINK</td><td>${currentData.LINK?.currentModel || 'Challenger Tilted'}</td><td class="text-[#2ECC71]">Active</td></tr>
-      <tr><td class="py-1.5 font-bold">ETH</td><td>${currentData.ETH?.currentModel || 'k-NN Calibrated'}</td><td class="text-[#2ECC71]">Active</td></tr>
-    </tbody>
-  </table>`;
+// ---- EXP-002: no PulseWorkerV2 endpoint reads selection_decisions_anomaly
+// yet (confirmed by inspecting worker.js — the table is insert-only). This
+// tries the endpoint the roadmap proposes anyway: the moment it exists,
+// this card starts showing live data with no further change needed here.
+async function loadExp002() {
+  const statusEl = 'exp002Status';
+  const bodyEl = document.getElementById('exp002Body');
+  if (!bodyEl) return;
+  setLabStatus(statusEl, 'Loading…', 'warn');
+
+  try {
+    const res = await fetch(`${API_BASE}/research/anomaly-gate-log?limit=100`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const rows = Array.isArray(data.decisions) ? data.decisions : Array.isArray(data.rows) ? data.rows : [];
+    if (!rows.length) throw new Error('no rows returned');
+    renderExp002Live(rows, statusEl, bodyEl);
+  } catch (e) {
+    renderExp002Awaiting(statusEl, bodyEl);
+  }
+}
+
+function renderExp002Awaiting(statusEl, bodyEl) {
+  setLabStatus(statusEl, 'Awaiting read endpoint', 'warn');
+  bodyEl.innerHTML = `
+    <div class="p-3 bg-[#FEF9E7] border border-[#F9E79F] rounded-xl">
+      <p class="text-xs text-[#7D6608] font-semibold mb-1">No read endpoint yet</p>
+      <p class="text-xs text-[#7D6608] leading-relaxed">
+        PulseWorkerV2 writes a row to <code class="font-mono-data">selection_decisions_anomaly</code> on every
+        regime-anomalous cycle, but nothing currently reads it back out — there is no
+        <code class="font-mono-data">GET /research/anomaly-gate-log</code> (or equivalent) yet. This card will
+        start showing live cleared-gate rate and recent decisions the moment that endpoint exists, with no
+        further change needed on this side.
+      </p>
+    </div>`;
+}
+
+function renderExp002Live(rows, statusEl, bodyEl) {
+  const sorted = [...rows].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const isCleared = r => r.cleared_gate_anomaly === 1 || r.cleared_gate_anomaly === true;
+  const clearedCount = sorted.filter(isCleared).length;
+  const clearRate = sorted.length ? (clearedCount / sorted.length * 100) : null;
+
+  setLabStatus(statusEl, 'BACKTESTING', 'ok');
+
+  let cumCleared = 0;
+  const series = sorted.map((r, i) => {
+    if (isCleared(r)) cumCleared++;
+    return { x: i + 1, y: cumCleared / (i + 1) * 100 };
+  });
+
+  bodyEl.innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Logged cycles</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${sorted.length}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Cleared softened gate</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${clearRate == null ? '—' : clearRate.toFixed(1) + '%'}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Margin factor</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">×${sorted[sorted.length - 1]?.margin_factor ?? '—'}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Data span</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(sorted[0]?.ts)} → ${fmtLabDate(sorted[sorted.length - 1]?.ts)}</p>
+      </div>
+    </div>
+    <p class="text-[0.6rem] text-[#718096] mb-3">Row-level, not episode-deduplicated — consecutive anomaly cycles inside the same market move are not independent evidence.</p>
+    <div class="mb-4"><div style="height:160px"><canvas id="exp002Chart"></canvas></div></div>
+    <p class="text-[0.65rem] text-[#718096] mb-1">Recent logged decisions</p>
+    <div class="overflow-x-auto" style="max-height:280px;overflow-y:auto">
+      <table class="w-full text-xs text-[#4A4A5E]">
+        <thead class="sticky top-0 bg-white"><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
+          <th class="py-1 pr-2">Date</th><th class="py-1 pr-2">Coin</th><th class="py-1 pr-2">Horizon</th>
+          <th class="py-1 pr-2">Chosen (softened)</th><th class="py-1 pr-2">Cleared</th><th class="py-1">Reason</th>
+        </tr></thead>
+        <tbody>
+          ${[...sorted].reverse().slice(0, 30).map(r => `<tr class="border-b border-[#F0F0F0]">
+            <td class="py-1 pr-2 font-mono-data">${fmtLabDate(r.ts)}</td>
+            <td class="py-1 pr-2 font-semibold">${r.coin ?? '—'}</td>
+            <td class="py-1 pr-2">${r.horizon_hours ?? '—'}H</td>
+            <td class="py-1 pr-2">${r.chosen_variant_anomaly ?? '—'}</td>
+            <td class="py-1 pr-2">${isCleared(r) ? '✅' : '—'}</td>
+            <td class="py-1 text-[0.65rem]">${r.reason_anomaly ?? '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const canvas = document.getElementById('exp002Chart');
+  if (canvas) {
+    if (labChartInstances.exp002) { labChartInstances.exp002.destroy(); labChartInstances.exp002 = null; }
+    labChartInstances.exp002 = new Chart(canvas, {
+      type: 'line',
+      data: { datasets: [{ label: 'Cleared-gate rate', data: series, borderColor: '#2ECC71', borderWidth: 2, pointRadius: 0, tension: 0.15 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { type: 'linear', title: { display: true, text: 'logged cycles', font: { size: 9 } }, ticks: { font: { size: 9 } } },
+          y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 9 } } }
+        }
+      }
+    });
+  }
+}
+
+// ---- EXP-003: challenger_predictions (with p_up_momentum / momentum_triggered)
+// is already served by the existing, working GET /challenger-recent — no
+// PulseWorkerV2 change needed for this card. ----
+async function loadExp003() {
+  const statusEl = 'exp003Status';
+  const bodyEl = document.getElementById('exp003Body');
+  if (!bodyEl) return;
+  setLabStatus(statusEl, 'Loading…', 'warn');
+
+  let rows;
+  try {
+    const res = await fetch(`${API_BASE}/challenger-recent?limit=200`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    rows = Array.isArray(data.predictions) ? data.predictions : [];
+  } catch (e) {
+    setLabStatus(statusEl, 'Fetch failed', 'warn');
+    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /challenger-recent (${e.message}). Try Refresh.</p>`;
+    return;
+  }
+
+  const ELIGIBILITY_BAR = 50;
+  const isTriggered = r => r.momentum_triggered === 1 || r.momentum_triggered === true;
+  const triggered = rows.filter(isTriggered).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const resolved = triggered.filter(r => r.resolved_ts != null && r.realized_up != null);
+
+  if (!triggered.length) {
+    setLabStatus(statusEl, 'IMPLEMENTED', 'warn');
+    bodyEl.innerHTML = `<p class="text-xs text-[#718096]">No momentum-triggered cycles in the last ${rows.length} challenger predictions yet — this variant only activates during anomalous + strong-trend conditions.</p>`;
+    return;
+  }
+
+  setLabStatus(statusEl, resolved.length >= ELIGIBILITY_BAR ? 'BACKTESTING' : 'IMPLEMENTED', resolved.length >= ELIGIBILITY_BAR ? 'ok' : 'warn');
+
+  const isMomentumCorrect = r => (r.p_up_momentum >= 0.5) === (r.realized_up === 1);
+  const isFlatCorrect = r => (r.p_up_flat >= 0.5) === (r.realized_up === 1);
+  const momentumAcc = resolved.length ? (resolved.filter(isMomentumCorrect).length / resolved.length * 100) : null;
+  const flatAcc = resolved.length ? (resolved.filter(isFlatCorrect).length / resolved.length * 100) : null;
+  const progressPct = Math.min(100, resolved.length / ELIGIBILITY_BAR * 100);
+
+  let mCorrect = 0, fCorrect = 0;
+  const momentumSeries = [], flatSeries = [];
+  resolved.forEach((r, i) => {
+    if (isMomentumCorrect(r)) mCorrect++;
+    if (isFlatCorrect(r)) fCorrect++;
+    momentumSeries.push({ x: i + 1, y: mCorrect / (i + 1) * 100 });
+    flatSeries.push({ x: i + 1, y: fCorrect / (i + 1) * 100 });
+  });
+
+  bodyEl.innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Triggered</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${triggered.length}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Resolved</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${resolved.length} / ${ELIGIBILITY_BAR}</p>
+        <div class="w-full h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden mt-1"><div class="h-full bg-[#4A90E2]" style="width:${progressPct}%"></div></div>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Momentum accuracy</p>
+        <p class="text-sm font-bold ${momentumAcc == null ? 'text-[#1A1A2E]' : momentumAcc >= flatAcc ? 'text-[#2ECC71]' : 'text-[#E74C3C]'}">${momentumAcc == null ? '—' : momentumAcc.toFixed(1) + '%'}</p>
+        <p class="text-[0.6rem] text-[#718096]">flat baseline: ${flatAcc == null ? '—' : flatAcc.toFixed(1) + '%'}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Data span</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(triggered[0]?.ts)} → ${fmtLabDate(triggered[triggered.length - 1]?.ts)}</p>
+      </div>
+    </div>
+    ${resolved.length >= 5 ? `
+    <div class="mb-4">
+      <p class="text-[0.65rem] text-[#718096] mb-1">Cumulative directional accuracy as resolved rows accumulate — momentum vs. flat baseline, same rows</p>
+      <div style="height:160px"><canvas id="exp003Chart"></canvas></div>
+    </div>` : `<p class="text-xs text-[#718096] mb-4">Fewer than 5 resolved rows — evolution chart needs more data before it's meaningful.</p>`}
+    <p class="text-[0.65rem] text-[#718096] mb-1">Recent momentum-triggered cycles (row-level, not episode-deduplicated)</p>
+    <div class="overflow-x-auto" style="max-height:280px;overflow-y:auto">
+      <table class="w-full text-xs text-[#4A4A5E]">
+        <thead class="sticky top-0 bg-white"><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
+          <th class="py-1 pr-2">Date</th><th class="py-1 pr-2">Coin</th><th class="py-1 pr-2">Horizon</th>
+          <th class="py-1 pr-2">Trend</th><th class="py-1 pr-2">p_up momentum</th><th class="py-1 pr-2">p_up flat</th><th class="py-1">Status</th>
+        </tr></thead>
+        <tbody>
+          ${[...triggered].reverse().slice(0, 30).map(r => {
+            const hasOutcome = r.resolved_ts != null && r.realized_up != null;
+            const status = !hasOutcome ? '⏳ Pending' : isMomentumCorrect(r) ? '✅ Correct' : '❌ Wrong';
+            return `<tr class="border-b border-[#F0F0F0]">
+              <td class="py-1 pr-2 font-mono-data">${fmtLabDate(r.ts)}</td>
+              <td class="py-1 pr-2 font-semibold">${r.coin ?? '—'}</td>
+              <td class="py-1 pr-2">${r.horizon_hours ?? '—'}H</td>
+              <td class="py-1 pr-2 font-mono-data">${r.trend_strength != null ? r.trend_strength.toFixed(2) : '—'}</td>
+              <td class="py-1 pr-2 font-mono-data">${r.p_up_momentum != null ? (r.p_up_momentum * 100).toFixed(1) + '%' : '—'}</td>
+              <td class="py-1 pr-2 font-mono-data">${r.p_up_flat != null ? (r.p_up_flat * 100).toFixed(1) + '%' : '—'}</td>
+              <td class="py-1">${status}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  if (resolved.length >= 5) {
+    const canvas = document.getElementById('exp003Chart');
+    if (canvas) {
+      if (labChartInstances.exp003) { labChartInstances.exp003.destroy(); labChartInstances.exp003 = null; }
+      labChartInstances.exp003 = new Chart(canvas, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Momentum', data: momentumSeries, borderColor: '#9B59B6', borderWidth: 2, pointRadius: 0, tension: 0.15 },
+            { label: 'Flat baseline', data: flatSeries, borderColor: '#95A5A6', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, tension: 0.15 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } } },
+          scales: {
+            x: { type: 'linear', title: { display: true, text: 'resolved rows', font: { size: 9 } }, ticks: { font: { size: 9 } } },
+            y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 9 } } }
+          }
+        }
+      });
+    }
+  }
 }
 
 async function loadLearningOverview() {
