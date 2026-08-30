@@ -14,6 +14,7 @@
     --color-bullish: #2ECC71;
     --color-bearish: #E74C3C;
     --color-border: #E2E8F0;
+    --color-accent: #4A90E2;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -23,68 +24,110 @@
     color: var(--color-text);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  .widget-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .widget-wrap {
     padding: 10px;
   }
+
+  /* Coin picker — only shown when the widget isn't locked to one coin via
+     ?coin=. A widget instance meant to sit on the home screen should be
+     locked (no interactive controls to fumble on a tiny surface); this is
+     for choosing/bookmarking a coin before installing. */
+  .coin-picker {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .coin-picker button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    color: var(--color-text-secondary);
+    font-weight: 700;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .coin-picker button.active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+  }
+  .locked-note {
+    font-size: 0.55rem;
+    color: var(--color-text-muted);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
   .coin-card {
     background: var(--color-card);
-    border-radius: 16px;
-    padding: 14px 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    border-left: 4px solid var(--color-border);
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    border-left: 5px solid var(--color-border);
   }
   .coin-card[data-coin="BTC"] { border-left-color: #F7931A; }
   .coin-card[data-coin="LINK"] { border-left-color: #2A5ADA; }
   .coin-card[data-coin="ETH"] { border-left-color: #627EEA; }
 
-  .coin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .coin-info { display: flex; align-items: center; gap: 6px; }
-  .coin-icon-fallback { font-size: 1.1rem; }
-  .coin-logo { width: 22px; height: 22px; object-fit: contain; }
-  .coin-name { font-weight: 700; font-size: 0.9rem; }
-  .coin-symbol { font-size: 0.55rem; font-weight: 600; color: var(--color-text-muted); background: var(--color-bg); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--color-border); }
-  .coin-price { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .coin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .coin-info { display: flex; align-items: center; gap: 7px; }
+  .coin-icon-fallback { font-size: 1.4rem; }
+  .coin-logo { width: 26px; height: 26px; object-fit: contain; }
+  .coin-name { font-weight: 700; font-size: 1.05rem; }
+  .coin-symbol { font-size: 0.6rem; font-weight: 600; color: var(--color-text-muted); background: var(--color-bg); padding: 1px 7px; border-radius: 4px; border: 1px solid var(--color-border); }
+  .coin-price { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 
-  .prediction-call { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .direction { font-weight: 800; font-size: 0.8rem; padding: 2px 8px; border-radius: 6px; }
+  .prediction-call { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .direction { font-weight: 800; font-size: 0.9rem; padding: 3px 10px; border-radius: 7px; }
   .direction.up { color: var(--color-bullish); background: #EAFAF1; }
   .direction.down { color: var(--color-bearish); background: #FDEDEC; }
-  .confidence { font-weight: 700; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  .confidence { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 
-  .model-info { font-size: 0.65rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .model-info { font-size: 0.75rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
   .model-name { font-weight: 600; color: var(--color-text); }
-  .status-pill { font-size: 0.55rem; font-weight: 600; padding: 1px 7px; border-radius: 8px; }
+  .status-pill { font-size: 0.62rem; font-weight: 600; padding: 2px 8px; border-radius: 9px; }
   .status-pill.positive { color: #2ECC71; background: #EAFAF1; }
   .status-pill.negative { color: #E74C3C; background: #FDEDEC; }
   .status-pill.neutral  { color: #95A5A6; background: #F0F0F0; }
 
-  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 7px 10px; background: var(--color-bg); border-radius: 8px; margin-bottom: 8px; }
-  .metric-item { display: flex; align-items: center; gap: 5px; font-size: 0.62rem; }
-  .metric-label { color: var(--color-text-muted); font-weight: 500; font-size: 0.52rem; text-transform: uppercase; }
-  .metric-value { font-weight: 700; font-size: 0.72rem; }
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 9px 12px; background: var(--color-bg); border-radius: 10px; margin-bottom: 10px; }
+  .metric-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; }
+  .metric-label { color: var(--color-text-muted); font-weight: 500; font-size: 0.58rem; text-transform: uppercase; }
+  .metric-value { font-weight: 700; font-size: 0.82rem; }
   .metric-value.positive { color: var(--color-bullish); }
   .metric-value.negative { color: var(--color-bearish); }
 
-  .spark { display: block; width: 100%; height: 28px; }
+  .spark { display: block; width: 100%; height: 34px; }
 
-  .stale-note { font-size: 0.55rem; color: var(--color-text-muted); text-align: right; padding: 0 4px; }
-  .error-note { font-size: 0.65rem; color: var(--color-bearish); padding: 8px; text-align: center; }
+  .stale-note { font-size: 0.58rem; color: var(--color-text-muted); text-align: right; padding: 6px 4px 0; }
+  .error-note { font-size: 0.7rem; color: var(--color-bearish); padding: 10px; text-align: center; }
 </style>
 </head>
 <body>
-<div class="widget-stack" id="widgetStack">
-  <p class="error-note" id="loadingNote">Loading…</p>
+<div class="widget-wrap">
+  <div id="pickerHost"></div>
+  <div id="widgetCard">
+    <p class="error-note" id="loadingNote">Loading…</p>
+  </div>
+  <div class="stale-note" id="updatedNote"></div>
 </div>
-<div class="stale-note" id="updatedNote"></div>
 
 <script>
-// Self-contained widget view — same data source/normalization as the main
-// dashboard (index.html), trimmed to just what a compact home-screen widget
-// needs. No external CDN dependencies (no Tailwind, no Chart.js) so it loads
-// fast and reliably inside a third-party "URL as widget" Android app.
+// Self-contained single-coin widget view — same data source/normalization as
+// the main dashboard (index.html), trimmed to what fits a home-screen widget.
+// No external CDN dependencies (no Tailwind, no Chart.js) so it loads fast
+// and reliably inside a third-party "URL as widget" Android app.
+//
+// Coin selection: pass ?coin=BTC|LINK|ETH in the URL to lock a widget
+// instance to one coin (recommended — install a separate widget per coin
+// this way, each pointed at its own URL). Without the param, a small picker
+// is shown and the choice is remembered in localStorage for next load.
 const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
 const COINS = ['BTC', 'LINK', 'ETH'];
 const COIN_NAMES = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
@@ -104,6 +147,7 @@ const SELECTION_VARIANT_LABELS = {
   challenger_calibrated: 'Challenger Calibrated'
 };
 const WIDGET_REFRESH_MS = 60000;
+const STORAGE_KEY = 'cryptopulse-widget-coin';
 
 function normalizePrediction(p) {
   if (!p) return {};
@@ -223,7 +267,7 @@ function renderCard(data) {
   const trendArrow = data.accuracyTrend === 'positive' ? '↑ Improving' : data.accuracyTrend === 'negative' ? '↓ Declining' : '→ Stable';
   const expected = lastPred ? parseFloat(lastPred.expectedMove) : 0;
   const expSign = expected > 0 ? '+' : '';
-  const path = sparkPath(data.prices.slice(-30), 300, 28);
+  const path = sparkPath(data.prices.slice(-30), 320, 34);
 
   return `
     <div class="coin-card" data-coin="${coin}">
@@ -251,22 +295,69 @@ function renderCard(data) {
         <div class="metric-item"><span class="metric-label">Takeovers</span> <span class="metric-value">${data.takeovers}</span></div>
         <div class="metric-item" style="grid-column:1/-1"><span class="metric-label">Expected</span> <span class="metric-value ${expected >= 0 ? 'positive' : 'negative'}">${expSign}${expected.toFixed(2)}%</span></div>
       </div>
-      ${path ? `<svg class="spark" viewBox="0 0 300 28" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${COIN_COLORS[coin]}" stroke-width="2"/></svg>` : ''}
+      ${path ? `<svg class="spark" viewBox="0 0 320 34" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${COIN_COLORS[coin]}" stroke-width="2.5"/></svg>` : ''}
     </div>
   `;
 }
 
-async function loadWidget() {
-  const stack = document.getElementById('widgetStack');
+function getLockedCoinFromUrl() {
+  const param = (new URLSearchParams(location.search).get('coin') || '').toUpperCase();
+  return COINS.includes(param) ? param : null;
+}
+
+function getStoredCoin() {
   try {
-    const results = await Promise.all(COINS.map(fetchCoinData));
-    stack.innerHTML = results.map(renderCard).join('');
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return COINS.includes(stored) ? stored : null;
+  } catch (e) { return null; }
+}
+
+function storeCoin(coin) {
+  try { localStorage.setItem(STORAGE_KEY, coin); } catch (e) { /* private mode etc — non-fatal */ }
+}
+
+const lockedCoin = getLockedCoinFromUrl();
+let selectedCoin = lockedCoin || getStoredCoin() || 'BTC';
+
+function renderPicker() {
+  const host = document.getElementById('pickerHost');
+  if (lockedCoin) {
+    // Locked via ?coin= — no interactive controls on the widget surface.
+    host.innerHTML = `<p class="locked-note">Locked to ${COIN_NAMES[lockedCoin]} — remove ?coin= from the URL to pick a different coin</p>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="coin-picker">
+      ${COINS.map(c => `<button data-coin="${c}" class="${c === selectedCoin ? 'active' : ''}">${COIN_ICONS[c]} ${c}</button>`).join('')}
+    </div>
+  `;
+  host.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedCoin = btn.dataset.coin;
+      storeCoin(selectedCoin);
+      // Reflect the choice in the URL so it can be copied straight into a
+      // widget app's config field, already locked to this coin.
+      const url = new URL(location.href);
+      url.searchParams.set('coin', selectedCoin);
+      history.replaceState(null, '', url);
+      renderPicker();
+      loadWidget();
+    });
+  });
+}
+
+async function loadWidget() {
+  const card = document.getElementById('widgetCard');
+  try {
+    const data = await fetchCoinData(selectedCoin);
+    card.innerHTML = renderCard(data);
     document.getElementById('updatedNote').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   } catch (e) {
-    stack.innerHTML = `<p class="error-note">Could not load prices (${e.message}). Will retry.</p>`;
+    card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
   }
 }
 
+renderPicker();
 loadWidget();
 setInterval(loadWidget, WIDGET_REFRESH_MS);
 </script>
