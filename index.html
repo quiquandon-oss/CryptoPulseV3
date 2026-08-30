@@ -2518,114 +2518,180 @@ function fmtLabDate(ts) {
   return ts ? new Date(ts).toLocaleDateString() : '—';
 }
 
-// ---- EXP-002: no PulseWorkerV2 endpoint reads selection_decisions_anomaly
-// yet (confirmed by inspecting worker.js — the table is insert-only). This
-// tries the endpoint the roadmap proposes anyway: the moment it exists,
-// this card starts showing live data with no further change needed here.
+// ---- EXP-002: GET /research/anomaly-gate (no coin/horizon = full 3x2 audit)
+// joins selection_decisions_anomaly against the real production decision and
+// the resolved outcome, already grouped into episodes and carrying its own
+// aggregate (with an explicit insufficient_sample flag) per coin/horizon. We
+// read those fields as-is here — no re-deriving accuracy/episodes client-side.
 async function loadExp002() {
   const statusEl = 'exp002Status';
   const bodyEl = document.getElementById('exp002Body');
   if (!bodyEl) return;
   setLabStatus(statusEl, 'Loading…', 'warn');
 
+  let audit;
   try {
-    const res = await fetch(`${API_BASE}/research/anomaly-gate-log?limit=100`);
+    const res = await fetch(`${API_BASE}/research/anomaly-gate`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const rows = Array.isArray(data.decisions) ? data.decisions : Array.isArray(data.rows) ? data.rows : [];
-    if (!rows.length) throw new Error('no rows returned');
-    renderExp002Live(rows, statusEl, bodyEl);
+    audit = await res.json();
+    if (!audit || audit.ok === false || !audit.results) throw new Error(audit?.error || 'malformed response');
   } catch (e) {
-    renderExp002Awaiting(statusEl, bodyEl);
+    setLabStatus(statusEl, 'Fetch failed', 'warn');
+    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /research/anomaly-gate (${e.message}). Try Refresh.</p>`;
+    return;
   }
+
+  renderExp002Live(audit, statusEl, bodyEl);
 }
 
-function renderExp002Awaiting(statusEl, bodyEl) {
-  setLabStatus(statusEl, 'Awaiting read endpoint', 'warn');
-  bodyEl.innerHTML = `
-    <div class="p-3 bg-[#FEF9E7] border border-[#F9E79F] rounded-xl">
-      <p class="text-xs text-[#7D6608] font-semibold mb-1">No read endpoint yet</p>
-      <p class="text-xs text-[#7D6608] leading-relaxed">
-        PulseWorkerV2 writes a row to <code class="font-mono-data">selection_decisions_anomaly</code> on every
-        regime-anomalous cycle, but nothing currently reads it back out — there is no
-        <code class="font-mono-data">GET /research/anomaly-gate-log</code> (or equivalent) yet. This card will
-        start showing live cleared-gate rate and recent decisions the moment that endpoint exists, with no
-        further change needed on this side.
-      </p>
-    </div>`;
-}
+function renderExp002Live(audit, statusEl, bodyEl) {
+  const combos = [];
+  let allRows = [];
+  for (const coin of ['BTC', 'LINK', 'ETH']) {
+    for (const h of [12, 24]) {
+      const r = audit.results?.[coin]?.[h];
+      if (!r || !r.ok) continue;
+      combos.push({ coin, horizon: h, report: r });
+      allRows = allRows.concat((r.rows || []).map(row => ({ ...row, coin, horizon: h })));
+    }
+  }
+  allRows.sort((a, b) => (a.prediction_ts || 0) - (b.prediction_ts || 0));
 
-function renderExp002Live(rows, statusEl, bodyEl) {
-  const sorted = [...rows].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  const isCleared = r => r.cleared_gate_anomaly === 1 || r.cleared_gate_anomaly === true;
-  const clearedCount = sorted.filter(isCleared).length;
-  const clearRate = sorted.length ? (clearedCount / sorted.length * 100) : null;
+  if (allRows.length === 0) {
+    setLabStatus(statusEl, 'IMPLEMENTED', 'warn');
+    bodyEl.innerHTML = `<p class="text-xs text-[#718096]">No high-anomaly cycles logged yet for any coin/horizon — the gate only activates when <code class="font-mono-data">is_regime_anomaly=1</code>. Nothing wrong; there's simply nothing to audit yet.</p>`;
+    return;
+  }
 
-  setLabStatus(statusEl, 'BACKTESTING', 'ok');
+  const totalEpisodes = combos.reduce((s, c) => s + (c.report.episodes?.length || 0), 0);
+  const resolvedRows = allRows.filter(r => r.resolved);
 
-  let cumCleared = 0;
-  const series = sorted.map((r, i) => {
-    if (isCleared(r)) cumCleared++;
-    return { x: i + 1, y: cumCleared / (i + 1) * 100 };
+  // Cumulative accuracy, production's actual choice vs. the softened-gate
+  // alternative, on the same paired resolved cycles (chronological order) —
+  // this is Experiment 2's core question, visualized the same way EXP-003
+  // visualizes momentum vs. flat.
+  let prodCorrect = 0, gateCorrect = 0, comparable = 0;
+  const prodSeries = [], gateSeries = [];
+  resolvedRows.forEach(r => {
+    if (r.production_chosen_p_up == null || r.anomaly_gate_chosen_p_up == null) return;
+    comparable++;
+    const actualUp = r.realized_up === 1;
+    if ((r.production_chosen_p_up >= 0.5) === actualUp) prodCorrect++;
+    if ((r.anomaly_gate_chosen_p_up >= 0.5) === actualUp) gateCorrect++;
+    prodSeries.push({ x: comparable, y: prodCorrect / comparable * 100 });
+    gateSeries.push({ x: comparable, y: gateCorrect / comparable * 100 });
   });
 
+  setLabStatus(statusEl, resolvedRows.length > 0 ? 'BACKTESTING' : 'IMPLEMENTED', resolvedRows.length > 0 ? 'ok' : 'warn');
+
+  const anyAvailable = combos.some(c => c.report.aggregate?.available);
+  const anyInsufficient = combos.some(c => c.report.aggregate?.available && c.report.aggregate.insufficient_sample);
+
   bodyEl.innerHTML = `
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
       <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Logged cycles</p>
-        <p class="text-sm font-bold text-[#1A1A2E]">${sorted.length}</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${allRows.length}</p>
       </div>
       <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
-        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Cleared softened gate</p>
-        <p class="text-sm font-bold text-[#1A1A2E]">${clearRate == null ? '—' : clearRate.toFixed(1) + '%'}</p>
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Episodes</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${totalEpisodes}</p>
       </div>
       <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
-        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Margin factor</p>
-        <p class="text-sm font-bold text-[#1A1A2E]">×${sorted[sorted.length - 1]?.margin_factor ?? '—'}</p>
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Paired resolved</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${comparable}</p>
       </div>
       <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Data span</p>
-        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(sorted[0]?.ts)} → ${fmtLabDate(sorted[sorted.length - 1]?.ts)}</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(allRows[0]?.prediction_ts)} → ${fmtLabDate(allRows[allRows.length - 1]?.prediction_ts)}</p>
       </div>
     </div>
-    <p class="text-[0.6rem] text-[#718096] mb-3">Row-level, not episode-deduplicated — consecutive anomaly cycles inside the same market move are not independent evidence.</p>
-    <div class="mb-4"><div style="height:160px"><canvas id="exp002Chart"></canvas></div></div>
+    ${anyAvailable ? `<p class="text-[0.65rem] ${anyInsufficient ? 'text-[#D68910]' : 'text-[#718096]'} mb-3">${anyInsufficient ? '⚠ Insufficient sample on at least one coin/horizon — treat the percentages below as directional, not a finding, until the episode-level bar is cleared.' : 'Episode-level sample size requirement met on all combinations with data.'}</p>` : ''}
+    ${comparable >= 5 ? `
+    <div class="mb-4">
+      <p class="text-[0.65rem] text-[#718096] mb-1">Cumulative directional accuracy on the same paired cycles — production's actual choice vs. the softened-gate alternative</p>
+      <div style="height:160px"><canvas id="exp002Chart"></canvas></div>
+    </div>` : `<p class="text-xs text-[#718096] mb-4">Fewer than 5 paired resolved cycles — evolution chart needs more data before it's meaningful.</p>`}
+    <p class="text-[0.65rem] text-[#718096] mb-1">Per coin/horizon breakdown (stratified, not blended)</p>
+    <div class="overflow-x-auto mb-4">
+      <table class="w-full text-xs text-[#4A4A5E]">
+        <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
+          <th class="py-1 pr-2">Coin</th><th class="py-1 pr-2">Horizon</th><th class="py-1 pr-2">n</th>
+          <th class="py-1 pr-2">Episodes</th><th class="py-1 pr-2">Production acc.</th><th class="py-1 pr-2">Gate acc.</th>
+          <th class="py-1 pr-2">Agreement</th><th class="py-1">Sample</th>
+        </tr></thead>
+        <tbody>
+          ${combos.map(c => {
+            const a = c.report.aggregate;
+            const sampleBadge = !a || !a.available ? '—' : a.insufficient_sample ? '<span class="text-[#D68910]">low</span>' : '<span class="text-[#2ECC71]">ok</span>';
+            return `<tr class="border-b border-[#F0F0F0]">
+              <td class="py-1 pr-2 font-semibold">${c.coin}</td>
+              <td class="py-1 pr-2">${c.horizon}H</td>
+              <td class="py-1 pr-2">${c.report.raw_observation_count}</td>
+              <td class="py-1 pr-2">${c.report.episodes?.length ?? 0}</td>
+              <td class="py-1 pr-2">${a?.production_accuracy != null ? a.production_accuracy + '%' : '—'}</td>
+              <td class="py-1 pr-2">${a?.anomaly_gate_accuracy != null ? a.anomaly_gate_accuracy + '%' : '—'}</td>
+              <td class="py-1 pr-2">${a?.agreement_rate != null ? a.agreement_rate + '%' : '—'}</td>
+              <td class="py-1">${sampleBadge}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
     <p class="text-[0.65rem] text-[#718096] mb-1">Recent logged decisions</p>
     <div class="overflow-x-auto" style="max-height:280px;overflow-y:auto">
       <table class="w-full text-xs text-[#4A4A5E]">
         <thead class="sticky top-0 bg-white"><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
           <th class="py-1 pr-2">Date</th><th class="py-1 pr-2">Coin</th><th class="py-1 pr-2">Horizon</th>
-          <th class="py-1 pr-2">Chosen (softened)</th><th class="py-1 pr-2">Cleared</th><th class="py-1">Reason</th>
+          <th class="py-1 pr-2">Production</th><th class="py-1 pr-2">Gate (softened)</th><th class="py-1 pr-2">Agree</th><th class="py-1">Outcome</th>
         </tr></thead>
         <tbody>
-          ${[...sorted].reverse().slice(0, 30).map(r => `<tr class="border-b border-[#F0F0F0]">
-            <td class="py-1 pr-2 font-mono-data">${fmtLabDate(r.ts)}</td>
-            <td class="py-1 pr-2 font-semibold">${r.coin ?? '—'}</td>
-            <td class="py-1 pr-2">${r.horizon_hours ?? '—'}H</td>
-            <td class="py-1 pr-2">${r.chosen_variant_anomaly ?? '—'}</td>
-            <td class="py-1 pr-2">${isCleared(r) ? '✅' : '—'}</td>
-            <td class="py-1 text-[0.65rem]">${r.reason_anomaly ?? '—'}</td>
-          </tr>`).join('')}
+          ${[...allRows].reverse().slice(0, 30).map(r => {
+            let outcome = '⏳ Pending';
+            if (r.resolved) {
+              const actualUp = r.realized_up === 1;
+              const prodOk = r.production_chosen_p_up != null ? (r.production_chosen_p_up >= 0.5) === actualUp : null;
+              const gateOk = r.anomaly_gate_chosen_p_up != null ? (r.anomaly_gate_chosen_p_up >= 0.5) === actualUp : null;
+              outcome = (prodOk == null && gateOk == null) ? '—' :
+                `P:${prodOk == null ? '—' : prodOk ? '✅' : '❌'} G:${gateOk == null ? '—' : gateOk ? '✅' : '❌'}`;
+            }
+            return `<tr class="border-b border-[#F0F0F0]">
+              <td class="py-1 pr-2 font-mono-data">${fmtLabDate(r.prediction_ts)}</td>
+              <td class="py-1 pr-2 font-semibold">${r.coin}</td>
+              <td class="py-1 pr-2">${r.horizon}H</td>
+              <td class="py-1 pr-2">${r.production_chosen_variant ?? '—'}</td>
+              <td class="py-1 pr-2">${r.anomaly_gate_chosen_variant ?? '—'}${r.cleared_gate_anomaly ? '' : ' (no clear)'}</td>
+              <td class="py-1 pr-2">${r.decisions_agree == null ? '—' : r.decisions_agree ? '✅' : '❌'}</td>
+              <td class="py-1">${outcome}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
   `;
 
-  const canvas = document.getElementById('exp002Chart');
-  if (canvas) {
-    if (labChartInstances.exp002) { labChartInstances.exp002.destroy(); labChartInstances.exp002 = null; }
-    labChartInstances.exp002 = new Chart(canvas, {
-      type: 'line',
-      data: { datasets: [{ label: 'Cleared-gate rate', data: series, borderColor: '#2ECC71', borderWidth: 2, pointRadius: 0, tension: 0.15 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { type: 'linear', title: { display: true, text: 'logged cycles', font: { size: 9 } }, ticks: { font: { size: 9 } } },
-          y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 9 } } }
+  if (comparable >= 5) {
+    const canvas = document.getElementById('exp002Chart');
+    if (canvas) {
+      if (labChartInstances.exp002) { labChartInstances.exp002.destroy(); labChartInstances.exp002 = null; }
+      labChartInstances.exp002 = new Chart(canvas, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: 'Production (actual)', data: prodSeries, borderColor: '#4A90E2', borderWidth: 2, pointRadius: 0, tension: 0.15 },
+            { label: 'Softened gate (alt.)', data: gateSeries, borderColor: '#2ECC71', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, tension: 0.15 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } } },
+          scales: {
+            x: { type: 'linear', title: { display: true, text: 'paired resolved cycles', font: { size: 9 } }, ticks: { font: { size: 9 } } },
+            y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 9 } } }
+          }
         }
-      }
-    });
+      });
+    }
   }
 }
 
