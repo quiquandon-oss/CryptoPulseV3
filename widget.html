@@ -150,7 +150,43 @@ const SELECTION_VARIANT_LABELS = {
   challenger_calibrated: 'Challenger Calibrated'
 };
 const WIDGET_REFRESH_MS = 60000;
+const FETCH_TIMEOUT_MS = 8000;
 const STORAGE_KEY = 'cryptopulse-widget-coin';
+const CACHE_KEY_PREFIX = 'cryptopulse-widget-cache-';
+
+// Many Android "website as home-screen widget" apps snapshot the page a
+// fixed short time after load rather than keeping a live JS context running
+// (that would be a battery drain for a widget host) -- if that snapshot
+// lands before the fetch below resolves, the widget freezes on whatever was
+// on screen at that instant. Two mitigations: bound the fetch so it can
+// never hang past FETCH_TIMEOUT_MS, and cache the last successful render so
+// even an early snapshot shows real numbers instead of "Loading…".
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function paintFromCache(coin) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + coin);
+    if (!raw) return false;
+    const cached = JSON.parse(raw);
+    if (!cached.html) return false;
+    document.getElementById('widgetCard').innerHTML = cached.html;
+    const ageMin = Math.round((Date.now() - cached.ts) / 60000);
+    document.getElementById('updatedNote').textContent = `Cached ${ageMin < 1 ? 'just now' : ageMin + 'm ago'} — refreshing…`;
+    return true;
+  } catch (e) { return false; }
+}
+
+function cacheRender(coin, html) {
+  try { localStorage.setItem(CACHE_KEY_PREFIX + coin, JSON.stringify({ html, ts: Date.now() })); } catch (e) { /* private mode / storage full — non-fatal */ }
+}
 
 function normalizePrediction(p) {
   if (!p) return {};
@@ -204,7 +240,7 @@ function normalizePricePoint(p) {
 
 async function fetchCoinData(coin) {
   const endpoint = coin === 'BTC' ? '/chart-data' : coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
-  const res = await fetch(`${API_BASE}${endpoint}?days=7&horizon=24H`);
+  const res = await fetchWithTimeout(`${API_BASE}${endpoint}?days=7&horizon=24H`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.json();
   const predictions = (raw.predictions || []).map(normalizePrediction);
@@ -212,7 +248,7 @@ async function fetchCoinData(coin) {
 
   let selections = [];
   try {
-    const selRes = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=40`);
+    const selRes = await fetchWithTimeout(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=40`);
     if (selRes.ok) {
       const rawSel = await selRes.json();
       const list = Array.isArray(rawSel) ? rawSel : (rawSel.decisions || []);
@@ -353,13 +389,21 @@ async function loadWidget() {
   const card = document.getElementById('widgetCard');
   try {
     const data = await fetchCoinData(selectedCoin);
-    card.innerHTML = renderCard(data);
+    const html = renderCard(data);
+    card.innerHTML = html;
+    cacheRender(selectedCoin, html);
     document.getElementById('updatedNote').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   } catch (e) {
-    card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
+    if (!paintFromCache(selectedCoin)) {
+      card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
+    }
   }
 }
 
+// Paint synchronously from cache first, before the network round-trip even
+// starts — this is what a widget-hosting app's early snapshot will actually
+// see, rather than the bare "Loading…" placeholder.
+paintFromCache(selectedCoin);
 renderPicker();
 loadWidget();
 setInterval(loadWidget, WIDGET_REFRESH_MS);
