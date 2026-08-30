@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse Widget</title>
+<style>
+  :root {
+    --color-bg: #F8F9FA;
+    --color-card: #FFFFFF;
+    --color-text: #1A1A2E;
+    --color-text-secondary: #4A4A5E;
+    --color-text-muted: #718096;
+    --color-bullish: #2ECC71;
+    --color-bearish: #E74C3C;
+    --color-border: #E2E8F0;
+    --color-accent: #4A90E2;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .widget-wrap {
+    padding: 10px;
+  }
+
+  /* Coin picker — only shown when the widget isn't locked to one coin via
+     ?coin=. A widget instance meant to sit on the home screen should be
+     locked (no interactive controls to fumble on a tiny surface); this is
+     for choosing/bookmarking a coin before installing. */
+  .coin-picker {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .coin-picker button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    color: var(--color-text-secondary);
+    font-weight: 700;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .coin-picker button.active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+  }
+  .locked-note {
+    font-size: 0.55rem;
+    color: var(--color-text-muted);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .coin-card {
+    background: var(--color-card);
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    border-left: 5px solid var(--color-border);
+  }
+  .coin-card[data-coin="BTC"] { border-left-color: #F7931A; }
+  .coin-card[data-coin="LINK"] { border-left-color: #2A5ADA; }
+  .coin-card[data-coin="ETH"] { border-left-color: #627EEA; }
+
+  .coin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .coin-info { display: flex; align-items: center; gap: 7px; }
+  .coin-icon-fallback { font-size: 1.4rem; }
+  .coin-logo { width: 26px; height: 26px; object-fit: contain; }
+  .coin-name { font-weight: 700; font-size: 1.05rem; }
+  .coin-symbol { font-size: 0.6rem; font-weight: 600; color: var(--color-text-muted); background: var(--color-bg); padding: 1px 7px; border-radius: 4px; border: 1px solid var(--color-border); }
+  .coin-price { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+  .prediction-call { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .direction { font-weight: 800; font-size: 0.9rem; padding: 3px 10px; border-radius: 7px; }
+  .direction.up { color: var(--color-bullish); background: #EAFAF1; }
+  .direction.down { color: var(--color-bearish); background: #FDEDEC; }
+  .confidence { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+  .model-info { font-size: 0.75rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+  .model-name { font-weight: 600; color: var(--color-text); }
+  .status-pill { font-size: 0.62rem; font-weight: 600; padding: 2px 8px; border-radius: 9px; }
+  .status-pill.positive { color: #2ECC71; background: #EAFAF1; }
+  .status-pill.negative { color: #E74C3C; background: #FDEDEC; }
+  .status-pill.neutral  { color: #95A5A6; background: #F0F0F0; }
+
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 9px 12px; background: var(--color-bg); border-radius: 10px; margin-bottom: 10px; }
+  .metric-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; }
+  .metric-label { color: var(--color-text-muted); font-weight: 500; font-size: 0.58rem; text-transform: uppercase; }
+  .metric-value { font-weight: 700; font-size: 0.82rem; }
+  .metric-value.positive { color: var(--color-bullish); }
+  .metric-value.negative { color: var(--color-bearish); }
+
+  .spark { display: block; width: 100%; height: 34px; }
+
+  .stale-note { font-size: 0.58rem; color: var(--color-text-muted); text-align: right; padding: 6px 4px 0; }
+  .error-note { font-size: 0.7rem; color: var(--color-bearish); padding: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="widget-wrap">
+  <div id="pickerHost"></div>
+  <div id="widgetCard">
+    <p class="error-note" id="loadingNote">Loading…</p>
+  </div>
+  <div class="stale-note" id="updatedNote"></div>
+</div>
+
+<script>
+// Self-contained single-coin widget view — same data source/normalization as
+// the main dashboard (index.html), trimmed to what fits a home-screen widget.
+// No external CDN dependencies (no Tailwind, no Chart.js) so it loads fast
+// and reliably inside a third-party "URL as widget" Android app.
+//
+// Coin selection: pass ?coin=BTC|LINK|ETH in the URL to lock a widget
+// instance to one coin (recommended — install a separate widget per coin
+// this way, each pointed at its own URL). Without the param, a small picker
+// is shown and the choice is remembered in localStorage for next load.
+const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
+const COINS = ['BTC', 'LINK', 'ETH'];
+const COIN_NAMES = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
+const COIN_ICONS = { BTC: '₿', LINK: '🔗', ETH: '⟠' };
+const COIN_COLORS = { BTC: '#F7931A', LINK: '#2A5ADA', ETH: '#627EEA' };
+const COIN_LOGOS = {
+  BTC: 'https://cryptologos.cc/logos/bitcoin-btc-logo.svg',
+  LINK: 'https://cryptologos.cc/logos/chainlink-link-logo.svg',
+  ETH: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg'
+};
+const SELECTION_VARIANT_LABELS = {
+  original: 'Original k-NN',
+  experimental: 'Experimental (adaptive-K)',
+  calibrated: 'k-NN Calibrated',
+  challenger_flat: 'Challenger Flat',
+  challenger_tilted: 'Challenger Tilted',
+  challenger_calibrated: 'Challenger Calibrated'
+};
+const WIDGET_REFRESH_MS = 60000;
+const STORAGE_KEY = 'cryptopulse-widget-coin';
+
+function normalizePrediction(p) {
+  if (!p) return {};
+  const n = { ...p };
+  const ts = p.ts || p.timestamp || p.time || p.date;
+  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+  const pUp = p.p_up !== undefined && p.p_up !== null ? parseFloat(p.p_up) : null;
+  if (pUp !== null) {
+    n.direction = pUp >= 0.5 ? 'UP' : 'DOWN';
+    n.confidence = Math.round((pUp >= 0.5 ? pUp : 1 - pUp) * 100);
+  } else if (p.direction) {
+    n.direction = String(p.direction).toUpperCase();
+    n.confidence = p.confidence ? Math.round(parseFloat(p.confidence)) : 75;
+  } else {
+    n.direction = 'UP';
+    n.confidence = 70;
+  }
+  const expMove = p.median_analog_return !== undefined ? p.median_analog_return : p.expectedMove;
+  n.expectedMove = expMove != null ? parseFloat(expMove).toFixed(2) : '0.00';
+  if (p.correct !== undefined) {
+    n.correct = Boolean(p.correct);
+  } else if (p.realized_up !== undefined && p.realized_up !== null) {
+    n.correct = (n.direction === 'UP') === (Number(p.realized_up) === 1);
+  }
+  return n;
+}
+
+function normalizeSelection(s) {
+  if (!s) return {};
+  const n = { ...s };
+  const raw = s.chosen_variant || s.selected_variant || s.model_name || 'Original k-NN';
+  n.selected_variant = SELECTION_VARIANT_LABELS[raw] || raw;
+  const ts = s.ts || s.timestamp || s.time;
+  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+  return n;
+}
+
+function normalizePricePoint(p) {
+  if (!p) return {};
+  const n = { ...p };
+  const val = p.price !== undefined ? p.price :
+              p.btc_price !== undefined ? p.btc_price :
+              p.link_price !== undefined ? p.link_price :
+              p.eth_price !== undefined ? p.eth_price :
+              p.close !== undefined ? p.close : 0;
+  n.price = parseFloat(val || 0);
+  const ts = p.ts || p.timestamp || p.time || p.date;
+  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+  return n;
+}
+
+async function fetchCoinData(coin) {
+  const endpoint = coin === 'BTC' ? '/chart-data' : coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
+  const res = await fetch(`${API_BASE}${endpoint}?days=7&horizon=24H`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const raw = await res.json();
+  const predictions = (raw.predictions || []).map(normalizePrediction);
+  const prices = (raw.prices || []).map(normalizePricePoint);
+
+  let selections = [];
+  try {
+    const selRes = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=40`);
+    if (selRes.ok) {
+      const rawSel = await selRes.json();
+      const list = Array.isArray(rawSel) ? rawSel : (rawSel.decisions || []);
+      selections = list.map(normalizeSelection);
+    }
+  } catch (e) { /* selection history is a nice-to-have, not required */ }
+
+  const currentModel = selections.length ? selections[selections.length - 1].selected_variant : 'Original k-NN';
+
+  let takeovers = 0, lastModel = null;
+  selections.forEach(s => {
+    const m = s.selected_variant || 'Original k-NN';
+    if (lastModel && m !== lastModel) takeovers++;
+    lastModel = m;
+  });
+
+  const resolved = predictions.filter(p => p.correct === true || p.correct === false);
+  const accuracy = resolved.length ? (resolved.filter(p => p.correct).length / resolved.length * 100) : null;
+  const recent = resolved.slice(-10), prior = resolved.slice(-20, -10);
+  let accuracyTrend = 'neutral';
+  if (recent.length > 0 && prior.length > 0) {
+    const recentAcc = recent.filter(p => p.correct).length / recent.length * 100;
+    const priorAcc = prior.filter(p => p.correct).length / prior.length * 100;
+    const diff = recentAcc - priorAcc;
+    accuracyTrend = diff > 2 ? 'positive' : diff < -2 ? 'negative' : 'neutral';
+  }
+
+  return { coin, predictions, prices, currentModel, takeovers, accuracy, accuracyTrend };
+}
+
+function sparkPath(prices, width, height) {
+  if (prices.length < 2) return '';
+  const vals = prices.map(p => p.price);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max - min) || 1;
+  const stepX = width / (vals.length - 1);
+  return vals.map((v, i) => {
+    const x = (i * stepX).toFixed(1);
+    const y = (height - ((v - min) / range) * height).toFixed(1);
+    return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+  }).join(' ');
+}
+
+function renderCard(data) {
+  const { coin } = data;
+  const lastPred = data.predictions[data.predictions.length - 1];
+  const lastPrice = data.prices[data.prices.length - 1];
+  const direction = lastPred?.direction || 'UP';
+  const confidence = lastPred?.confidence ?? '--';
+  const formatter = new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: coin === 'LINK' ? 2 : 0, maximumFractionDigits: coin === 'LINK' ? 2 : 2
+  });
+  const priceText = lastPrice ? formatter.format(lastPrice.price) : '$--';
+  const trendArrow = data.accuracyTrend === 'positive' ? '↑ Improving' : data.accuracyTrend === 'negative' ? '↓ Declining' : '→ Stable';
+  const expected = lastPred ? parseFloat(lastPred.expectedMove) : 0;
+  const expSign = expected > 0 ? '+' : '';
+  const path = sparkPath(data.prices.slice(-30), 320, 34);
+
+  return `
+    <div class="coin-card" data-coin="${coin}">
+      <div class="coin-header">
+        <div class="coin-info">
+          <span class="coin-icon-fallback">${COIN_ICONS[coin]}</span>
+          <img src="${COIN_LOGOS[coin]}" alt="" class="coin-logo" style="display:none"
+               onload="this.style.display='inline-block'; this.previousElementSibling.style.display='none';"
+               onerror="this.remove();">
+          <span class="coin-name">${COIN_NAMES[coin]}</span>
+          <span class="coin-symbol">${coin}</span>
+        </div>
+        <div class="coin-price">${priceText}</div>
+      </div>
+      <div class="prediction-call">
+        <span class="direction ${direction === 'UP' ? 'up' : 'down'}">${direction === 'UP' ? '▲' : '▼'} ${direction === 'UP' ? 'BULLISH' : 'BEARISH'}</span>
+        <span class="confidence">${confidence}%</span>
+      </div>
+      <div class="model-info">
+        Active: <span class="model-name">${data.currentModel}</span>
+        <span class="status-pill ${data.accuracyTrend}">${trendArrow}</span>
+      </div>
+      <div class="metrics">
+        <div class="metric-item"><span class="metric-label">Accuracy</span> <span class="metric-value">${data.accuracy == null ? '--' : data.accuracy.toFixed(1) + '%'}</span></div>
+        <div class="metric-item"><span class="metric-label">Takeovers</span> <span class="metric-value">${data.takeovers}</span></div>
+        <div class="metric-item" style="grid-column:1/-1"><span class="metric-label">Expected</span> <span class="metric-value ${expected >= 0 ? 'positive' : 'negative'}">${expSign}${expected.toFixed(2)}%</span></div>
+      </div>
+      ${path ? `<svg class="spark" viewBox="0 0 320 34" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${COIN_COLORS[coin]}" stroke-width="2.5"/></svg>` : ''}
+    </div>
+  `;
+}
+
+function getLockedCoinFromUrl() {
+  const param = (new URLSearchParams(location.search).get('coin') || '').toUpperCase();
+  return COINS.includes(param) ? param : null;
+}
+
+function getStoredCoin() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return COINS.includes(stored) ? stored : null;
+  } catch (e) { return null; }
+}
+
+function storeCoin(coin) {
+  try { localStorage.setItem(STORAGE_KEY, coin); } catch (e) { /* private mode etc — non-fatal */ }
+}
+
+const lockedCoin = getLockedCoinFromUrl();
+let selectedCoin = lockedCoin || getStoredCoin() || 'BTC';
+
+function renderPicker() {
+  const host = document.getElementById('pickerHost');
+  if (lockedCoin) {
+    // Locked via ?coin= — no interactive controls on the widget surface.
+    host.innerHTML = `<p class="locked-note">Locked to ${COIN_NAMES[lockedCoin]} — remove ?coin= from the URL to pick a different coin</p>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="coin-picker">
+      ${COINS.map(c => `<button data-coin="${c}" class="${c === selectedCoin ? 'active' : ''}">${COIN_ICONS[c]} ${c}</button>`).join('')}
+    </div>
+  `;
+  host.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedCoin = btn.dataset.coin;
+      storeCoin(selectedCoin);
+      // Reflect the choice in the URL so it can be copied straight into a
+      // widget app's config field, already locked to this coin.
+      const url = new URL(location.href);
+      url.searchParams.set('coin', selectedCoin);
+      history.replaceState(null, '', url);
+      renderPicker();
+      loadWidget();
+    });
+  });
+}
+
+async function loadWidget() {
+  const card = document.getElementById('widgetCard');
+  try {
+    const data = await fetchCoinData(selectedCoin);
+    card.innerHTML = renderCard(data);
+    document.getElementById('updatedNote').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } catch (e) {
+    card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
+  }
+}
+
+renderPicker();
+loadWidget();
+setInterval(loadWidget, WIDGET_REFRESH_MS);
+</script>
+</body>
+</html>
