@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CryptoPulse V2 — AI Prediction Dashboard</title>
+<title>CryptoPulse V3 — AI Model Predictions Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -17,98 +17,125 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   :root {
-    --bg-primary: #F8F9FA;
-    --card-bg: #FFFFFF;
-    --text-primary: #1A1A2E;
-    --text-secondary: #4A4A5E;
-    --text-muted: #718096;
-    --border-color: #E2E8F0;
-    --accent-blue: #4A90E2;
-    --bullish-green: #2ECC71;
-    --bearish-red: #E74C3C;
+    --color-bg: #F8F9FA;
+    --color-card: #FFFFFF;
+    --color-text: #1A1A2E;
+    --color-text-secondary: #4A4A5E;
+    --color-text-muted: #718096;
+    --color-accent: #4A90E2;
+    --color-bullish: #2ECC71;
+    --color-bearish: #E74C3C;
+    --color-border: #E2E8F0;
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.06);
+    --radius-card: 16px;
+    --radius-sm: 8px;
+    --transition: all 0.3s ease;
   }
+
   body {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: var(--color-bg);
+    color: var(--color-text);
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
   .font-mono-data { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; }
   .material-symbols-outlined { font-variation-settings: 'opsz' 24, 'wght' 400, 'FILL' 0; font-size: 20px; vertical-align: middle; }
 
   /* ============================================ */
-  /* UNIFIED DASHBOARD STYLES                     */
+  /* CRYPTOPULSE V3 - MOBILE-OPTIMIZED DASHBOARD  */
   /* ============================================ */
 
   .dashboard-container {
     max-width: 1440px;
     margin: 0 auto;
-    padding: 10px 0 40px;
+    padding: 16px 0 40px;
+    background: var(--color-bg);
+    min-height: 100vh;
   }
 
+  /* HEADER - V3 STYLING */
   .dashboard-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 24px;
-    padding: 16px 24px;
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
   }
 
-  .header-left h1 {
+  .logo-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
     font-size: 1.5rem;
+  }
+
+  .logo-wrapper h1 {
+    font-size: 1.25rem;
     font-weight: 800;
-    color: #1A1A2E;
+    color: var(--color-text);
     margin: 0;
   }
 
-  .header-left .subtitle {
-    font-size: 0.875rem;
-    color: #718096;
-    margin-top: 2px;
-    display: block;
+  .version-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: white;
+    background: linear-gradient(135deg, #4A90E2, #2ECC71, #9B59B6);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .subtitle {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-left: 4px;
+    display: inline-block;
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .live-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 0.875rem;
-    color: #4A4A5E;
-    background: #F8F9FA;
-    padding: 6px 16px;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    background: var(--color-bg);
+    padding: 4px 12px;
     border-radius: 20px;
-    border: 1px solid #E2E8F0;
+    border: 1px solid var(--color-border);
   }
 
   .live-dot {
-    width: 10px;
-    height: 10px;
-    background: #2ECC71;
+    width: 8px;
+    height: 8px;
+    background: var(--color-bullish);
     border-radius: 50%;
     animation: pulse 2s infinite;
   }
 
   @keyframes pulse {
-    0% { opacity: 1; transform: scale(1); }
+    0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.8); }
-    100% { opacity: 1; transform: scale(1); }
   }
 
   .update-time {
-    color: #718096;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
   }
 
   .status-badge {
@@ -120,62 +147,27 @@
   .status-ok { background: #EAFAF1; color: #27AE60; border: 1px solid #A9DFBF; }
   .status-warning { background: #FEF9E7; color: #D68910; border: 1px solid #F9E79F; }
 
-  .timeframe-selector {
-    display: flex;
-    gap: 4px;
-    background: #F8F9FA;
-    padding: 4px;
-    border-radius: 10px;
-    border: 1px solid #E2E8F0;
-  }
-
-  .tf-btn {
-    padding: 6px 14px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    font-weight: 600;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #4A4A5E;
-  }
-
-  .tf-btn:hover {
-    background: #E8ECF0;
-  }
-
-  .tf-btn.active {
-    background: #4A90E2;
-    color: white;
-  }
-
-  /* SUMMARY CARDS */
+  /* ENHANCED SUMMARY CARDS */
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    margin-bottom: 28px;
-  }
-
-  @media (max-width: 1024px) {
-    .summary-grid {
-      grid-template-columns: 1fr;
-    }
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
   }
 
   .summary-card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
-    border-left: 5px solid #4A90E2;
-    transition: transform 0.2s;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-accent);
+    transition: var(--transition);
   }
 
   .summary-card:hover {
     transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   }
 
   .summary-card[data-coin="BTC"] { border-left-color: #F7931A; }
@@ -184,197 +176,362 @@
 
   .coin-header {
     display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .coin-info {
+    display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   .coin-icon {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
   }
 
   .coin-name {
     font-weight: 700;
-    font-size: 1.1rem;
-    color: #1A1A2E;
+    font-size: 0.95rem;
+    color: var(--color-text);
+  }
+
+  .coin-symbol {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
   }
 
   .coin-price {
-    margin-left: auto;
     font-weight: 700;
-    font-size: 1.1rem;
-    color: #1A1A2E;
+    font-size: 1rem;
+    color: var(--color-text);
     font-family: 'JetBrains Mono', monospace;
   }
 
   .prediction-summary {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .prediction-call {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
 
   .direction {
     font-weight: 800;
-    font-size: 1.1rem;
-    padding: 4px 14px;
-    border-radius: 8px;
+    font-size: 0.9rem;
+    padding: 2px 10px;
+    border-radius: var(--radius-sm);
   }
 
   .direction.up {
-    color: #2ECC71;
+    color: var(--color-bullish);
     background: #EAFAF1;
   }
 
   .direction.down {
-    color: #E74C3C;
+    color: var(--color-bearish);
     background: #FDEDEC;
   }
 
   .confidence {
     font-weight: 700;
-    font-size: 1.25rem;
-    color: #1A1A2E;
+    font-size: 1.1rem;
+    color: var(--color-text);
     font-family: 'JetBrains Mono', monospace;
   }
 
   .model-info {
-    font-size: 0.875rem;
-    color: #4A4A5E;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .model-name {
     font-weight: 600;
-    color: #1A1A2E;
+    color: var(--color-text);
+  }
+
+  .model-tag {
+    font-size: 0.7rem;
   }
 
   .prediction-meta {
     display: flex;
-    gap: 20px;
-    font-size: 0.85rem;
-    color: #718096;
-    margin-top: 4px;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
   }
 
-  .prediction-meta strong {
-    color: #1A1A2E;
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .meta-icon {
+    font-size: 0.65rem;
+  }
+
+  .meta-item strong {
+    color: var(--color-text);
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* CHARTS GRID */
-  .charts-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    margin-bottom: 32px;
+  .mini-chart {
+    height: 35px;
+    margin-top: 6px;
   }
 
-  @media (max-width: 1200px) {
+  /* ENHANCED CHARTS WITH CONTROLS */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  @media (min-width: 1024px) {
     .charts-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 
   .chart-card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
   }
 
   .chart-card .chart-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #F0F0F0;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--color-border);
   }
 
-  .chart-card .chart-header h3 {
-    font-size: 1.1rem;
+  .chart-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .chart-title h3 {
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #1A1A2E;
+    color: var(--color-text);
     margin: 0;
+  }
+
+  .chart-coin-symbol {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
   }
 
   .chart-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
-  .model-badge {
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: #F0F7FF;
-    color: #4A90E2;
+  .chart-tf {
+    display: flex;
+    gap: 2px;
+    background: var(--color-bg);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
   }
 
-  .takeover-count {
-    font-size: 0.75rem;
-    color: #718096;
+  .chart-tf .tf-btn {
+    padding: 3px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    font-weight: 600;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--color-text-secondary);
+  }
+
+  .chart-tf .tf-btn:hover {
+    background: #E8ECF0;
+  }
+
+  .chart-tf .tf-btn.active {
+    background: var(--color-accent);
+    color: white;
+  }
+
+  .chart-action-btn {
+    padding: 4px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg);
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chart-action-btn:hover {
+    background: #E8ECF0;
+    color: var(--color-text);
+  }
+
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 4px 0 8px 0;
+    font-size: 0.65rem;
+    color: var(--color-text-secondary);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .legend-label {
+    font-size: 0.65rem;
   }
 
   .chart-wrapper {
-    height: 300px;
+    height: 280px;
     position: relative;
+  }
+
+  @media (min-width: 768px) {
+    .chart-wrapper {
+      height: 300px;
+    }
+  }
+
+  .chart-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+  }
+
+  .model-badge {
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.65rem;
+    background: #F0F7FF;
+    color: var(--color-accent);
+  }
+
+  .takeover-count {
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+  }
+
+  .prediction-horizon {
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
   }
 
   /* COMPARISON SECTION */
   .comparison-section {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 32px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
   }
 
   .comparison-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  @media (min-width: 640px) {
+    .comparison-header {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
   }
 
   .comparison-header h3 {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #1A1A2E;
+    color: var(--color-text);
     margin: 0;
   }
 
   .comparison-controls {
     display: flex;
     gap: 4px;
-    background: #F8F9FA;
-    padding: 4px;
-    border-radius: 10px;
-    border: 1px solid #E2E8F0;
+    background: var(--color-bg);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
   }
 
   .compare-btn {
-    padding: 6px 16px;
+    padding: 4px 12px;
     border: none;
-    border-radius: 8px;
+    border-radius: 4px;
     background: transparent;
     font-weight: 600;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     cursor: pointer;
-    transition: all 0.2s;
-    color: #4A4A5E;
+    transition: var(--transition);
+    color: var(--color-text-secondary);
   }
 
   .compare-btn:hover {
@@ -382,263 +539,346 @@
   }
 
   .compare-btn.active {
-    background: #4A90E2;
+    background: var(--color-accent);
     color: white;
   }
 
   .comparison-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-
-  @media (max-width: 768px) {
-    .comparison-grid {
-      grid-template-columns: 1fr;
-    }
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
   }
 
   .comparison-item {
-    background: #F8F9FA;
-    border-radius: 12px;
-    padding: 16px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
     text-align: center;
-    border: 1px solid #E2E8F0;
+    border: 1px solid var(--color-border);
   }
 
   .comparison-item .coin-label {
-    font-size: 0.8rem;
-    color: #718096;
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
     font-weight: 600;
     text-transform: uppercase;
   }
 
   .comparison-item .metric-value {
-    font-size: 1.8rem;
+    font-size: 1.3rem;
     font-weight: 800;
-    color: #1A1A2E;
-    margin: 4px 0;
+    color: var(--color-text);
+    margin: 2px 0;
     font-family: 'JetBrains Mono', monospace;
   }
 
   .comparison-item .metric-label {
-    font-size: 0.75rem;
-    color: #718096;
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
   }
 
   /* TIMELINE SECTION */
   .timeline-section {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 32px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
   }
 
   .timeline-section h3 {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #1A1A2E;
-    margin-bottom: 20px;
+    color: var(--color-text);
+    margin-bottom: 16px;
   }
 
   .timeline-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  @media (max-width: 1024px) {
+  @media (min-width: 768px) {
     .timeline-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 
   .timeline-card {
-    background: #F8F9FA;
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid #E2E8F0;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    border: 1px solid var(--color-border);
   }
 
   .timeline-card h4 {
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    color: #1A1A2E;
-    margin-bottom: 12px;
+    color: var(--color-text);
+    margin-bottom: 8px;
   }
 
   .timeline-container {
-    max-height: 220px;
+    max-height: 160px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .timeline-event {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background: white;
-    border-radius: 8px;
-    border-left: 3px solid #E74C3C;
-    border-top: 1px solid #F0F0F0;
-    border-right: 1px solid #F0F0F0;
-    border-bottom: 1px solid #F0F0F0;
-    font-size: 0.8rem;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--color-card);
+    border-radius: 6px;
+    border-left: 3px solid var(--color-bearish);
+    border-top: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.7rem;
   }
 
   .timeline-event .event-date {
-    color: #718096;
-    font-size: 0.7rem;
-    min-width: 75px;
+    color: var(--color-text-muted);
+    font-size: 0.6rem;
+    min-width: 70px;
     font-family: 'JetBrains Mono', monospace;
   }
 
   .timeline-event .event-models {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     font-weight: 500;
-    flex-wrap: wrap;
   }
 
   .timeline-event .event-arrow {
-    color: #718096;
+    color: var(--color-text-muted);
   }
 
   .timeline-event .model-from {
-    color: #4A4A5E;
+    color: var(--color-text-secondary);
   }
 
   .timeline-event .model-to {
-    color: #2ECC71;
+    color: var(--color-bullish);
     font-weight: 700;
   }
 
   .no-takeovers {
     text-align: center;
-    color: #718096;
-    padding: 20px;
-    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    padding: 12px;
+    font-size: 0.75rem;
   }
 
   /* DISTRIBUTION SECTION */
   .distribution-section {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border: 1px solid #E2E8F0;
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
   }
 
   .distribution-section h3 {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #1A1A2E;
-    margin-bottom: 20px;
+    color: var(--color-text);
+    margin-bottom: 16px;
   }
 
   .distribution-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  @media (max-width: 1024px) {
+  @media (min-width: 768px) {
     .distribution-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 
   .distribution-card {
-    background: #F8F9FA;
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid #E2E8F0;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    border: 1px solid var(--color-border);
   }
 
   .distribution-card h4 {
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    color: #1A1A2E;
-    margin-bottom: 12px;
+    color: var(--color-text);
+    margin-bottom: 8px;
   }
 
   .distribution-bars {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
   }
 
   .distribution-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 
   .distribution-row .model-label {
-    font-size: 0.75rem;
-    color: #4A4A5E;
-    min-width: 110px;
+    font-size: 0.65rem;
+    color: var(--color-text-secondary);
+    min-width: 90px;
     font-weight: 500;
   }
 
   .distribution-row .bar-track {
     flex: 1;
-    height: 8px;
+    height: 6px;
     background: #E8ECF0;
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
   }
 
   .distribution-row .bar-fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: 3px;
     transition: width 0.6s ease;
   }
 
   .distribution-row .bar-value {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     font-weight: 600;
-    color: #1A1A2E;
-    min-width: 45px;
+    color: var(--color-text);
+    min-width: 35px;
     text-align: right;
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* LOADING STATE */
-  .loading-state {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 280px;
-    color: #718096;
+  /* FULLSCREEN MODE */
+  .chart-card.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    border-radius: 0;
+    padding: 20px;
+    background: var(--color-card);
+    overflow-y: auto;
   }
 
-  .loading-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #F0F0F0;
-    border-top-color: #4A90E2;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-right: 12px;
+  .chart-card.fullscreen .chart-wrapper {
+    height: calc(100vh - 180px);
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  /* MOBILE OPTIMIZATIONS */
+  @media (max-width: 480px) {
+    .dashboard-container {
+      padding: 10px 0 20px;
+    }
+    .dashboard-header {
+      padding: 10px 12px;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-right {
+      justify-content: space-between;
+      width: 100%;
+    }
+    .logo-wrapper h1 {
+      font-size: 1rem;
+    }
+    .subtitle {
+      font-size: 0.65rem;
+    }
+    .summary-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .summary-card {
+      padding: 12px;
+    }
+    .coin-price {
+      font-size: 0.85rem;
+    }
+    .direction {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+    }
+    .confidence {
+      font-size: 0.95rem;
+    }
+    .chart-card {
+      padding: 12px;
+    }
+    .chart-wrapper {
+      height: 220px;
+    }
+    .chart-tf .tf-btn {
+      padding: 2px 6px;
+      font-size: 0.55rem;
+    }
+    .chart-action-btn {
+      padding: 2px 4px;
+    }
+    .chart-action-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+    .comparison-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .comparison-item {
+      padding: 8px;
+    }
+    .comparison-item .metric-value {
+      font-size: 1rem;
+    }
+    .timeline-event {
+      font-size: 0.6rem;
+      padding: 4px 6px;
+    }
+    .timeline-event .event-date {
+      min-width: 55px;
+      font-size: 0.55rem;
+    }
+    .distribution-row .model-label {
+      min-width: 65px;
+      font-size: 0.55rem;
+    }
+  }
+
+  /* SCROLLBAR STYLING */
+  .timeline-container::-webkit-scrollbar {
+    width: 4px;
+  }
+  .timeline-container::-webkit-scrollbar-track {
+    background: var(--color-bg);
+  }
+  .timeline-container::-webkit-scrollbar-thumb {
+    background: var(--color-text-muted);
+    border-radius: 2px;
   }
 </style>
 </head>
 <body class="bg-[#F8F9FA] text-[#1A1A2E] min-h-screen pb-20 md:pb-8">
-<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
   <!-- MAIN APP HEADER -->
-  <header class="mb-6">
+  <header class="mb-4">
     <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-[#4A90E2] flex items-center justify-center text-white shadow-md shrink-0">
@@ -646,15 +886,15 @@
         </div>
         <div>
           <div class="flex items-center gap-2 flex-wrap">
-            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1A1A2E]">CryptoPulse</h1>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1A1A2E]">CryptoPulse <span class="version-badge">V3</span></h1>
             <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#4A90E2]/10 text-[#4A90E2] border border-[#4A90E2]/20">AI Predictions</span>
           </div>
-          <p class="text-xs sm:text-sm text-[#4A4A5E] font-medium mt-0.5">Unified Multi-Coin AI Model Predictions Dashboard</p>
+          <p class="text-xs sm:text-sm text-[#4A4A5E] font-medium mt-0.5">Mobile-Optimized Multi-Coin AI Model Predictions Dashboard</p>
         </div>
       </div>
 
       <div class="flex items-center gap-2 sm:gap-3">
-        <button id="refreshBtn" title="Refresh all multi-coin model predictions" class="bg-white border border-[#E2E8F0] rounded-xl p-2.5 text-[#4A4A5E] hover:text-[#4A90E2] hover:border-[#4A90E2] transition-colors card-shadow flex items-center gap-2 text-xs font-semibold">
+        <button id="refreshBtn" title="Refresh all multi-coin model predictions" class="bg-white border border-[#E2E8F0] rounded-xl p-2.5 text-[#4A4A5E] hover:text-[#4A90E2] hover:border-[#4A90E2] transition-colors shadow-xs flex items-center gap-2 text-xs font-semibold">
           <svg id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6"/></svg>
           <span>Refresh Data</span>
         </button>
@@ -663,7 +903,7 @@
 
     <!-- Navigation Tabs Row -->
     <div class="flex items-center justify-between flex-wrap gap-3 pt-2 border-t border-[#E2E8F0]">
-      <nav class="hidden md:flex gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 card-shadow w-fit">
+      <nav class="hidden md:flex gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-xs w-fit">
         <button data-view="dashboard" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-all">Dashboard</button>
         <button data-view="lab" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-all">Lab</button>
         <button data-view="learning" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-all">AI Learning</button>
@@ -672,41 +912,41 @@
   </header>
 
   <!-- ============================================================ -->
-  <!-- VIEW 1: UNIFIED DASHBOARD                                    -->
+  <!-- VIEW 1: UNIFIED DASHBOARD (V3 MOBILE-OPTIMIZED)             -->
   <!-- ============================================================ -->
   <div id="view-dashboard">
     <div id="unified-dashboard" class="dashboard-container">
 
-        <!-- SECTION 1: HEADER & TIMELINE CONTROLS -->
+        <!-- SECTION 1: HEADER -->
         <header class="dashboard-header">
             <div class="header-left">
-                <h1>📊 CryptoPulse Comparison</h1>
-                <span class="subtitle">Real-time AI Model Predictions (24H Horizon)</span>
+                <div class="logo-wrapper">
+                    <span class="logo-icon">📊</span>
+                    <h1>CryptoPulse <span class="version-badge">V3</span></h1>
+                </div>
+                <span class="subtitle">AI Model Predictions</span>
             </div>
             <div class="header-right">
                 <div class="live-status">
                     <span class="live-dot"></span>
-                    <span>Live</span>
+                    <span class="status-text">Live</span>
                     <span class="update-time" id="updateTime">Updated: Just now</span>
                 </div>
                 <div id="dataStatus" class="status-badge status-ok">✅ Live data</div>
-                <div class="timeframe-selector">
-                    <button class="tf-btn active" data-days="7">1W</button>
-                    <button class="tf-btn" data-days="14">2W</button>
-                    <button class="tf-btn" data-days="30">1M</button>
-                    <button class="tf-btn" data-days="60">2M</button>
-                    <button class="tf-btn" data-days="90">3M</button>
-                </div>
             </div>
         </header>
 
-        <!-- SECTION 2: TOP SUMMARY CARDS -->
+        <!-- SECTION 2: ENHANCED SUMMARY CARDS -->
         <div class="summary-grid">
+            <!-- BTC Card -->
             <div class="summary-card" data-coin="BTC">
                 <div class="coin-header">
-                    <span class="coin-icon">₿</span>
-                    <span class="coin-name">Bitcoin</span>
-                    <span class="coin-price" id="btcPrice">$0.00</span>
+                    <div class="coin-info">
+                        <span class="coin-icon">₿</span>
+                        <span class="coin-name">Bitcoin</span>
+                        <span class="coin-symbol">BTC</span>
+                    </div>
+                    <div class="coin-price" id="btcPrice">$0.00</div>
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="btcCall">
@@ -716,19 +956,37 @@
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="btcModel">Loading...</span>
+                        <span class="model-tag">🧠</span>
                     </div>
                     <div class="prediction-meta">
-                        <span>Expected: <strong id="btcExpected">0.00%</strong></span>
-                        <span>Accuracy: <strong id="btcAccuracy">0.0%</strong></span>
+                        <span class="meta-item">
+                            <span class="meta-icon">📈</span>
+                            Expected: <strong id="btcExpected">0.00%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🎯</span>
+                            Accuracy: <strong id="btcAccuracy">0.0%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🔄</span>
+                            Takeovers: <strong id="btcTakeoversCount">0</strong>
+                        </span>
+                    </div>
+                    <div class="mini-chart" id="btcMiniChart">
+                        <canvas id="btcMiniCanvas"></canvas>
                     </div>
                 </div>
             </div>
 
+            <!-- LINK Card -->
             <div class="summary-card" data-coin="LINK">
                 <div class="coin-header">
-                    <span class="coin-icon">🔗</span>
-                    <span class="coin-name">Chainlink</span>
-                    <span class="coin-price" id="linkPrice">$0.00</span>
+                    <div class="coin-info">
+                        <span class="coin-icon">🔗</span>
+                        <span class="coin-name">Chainlink</span>
+                        <span class="coin-symbol">LINK</span>
+                    </div>
+                    <div class="coin-price" id="linkPrice">$0.00</div>
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="linkCall">
@@ -738,19 +996,37 @@
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="linkModel">Loading...</span>
+                        <span class="model-tag">🧠</span>
                     </div>
                     <div class="prediction-meta">
-                        <span>Expected: <strong id="linkExpected">0.00%</strong></span>
-                        <span>Accuracy: <strong id="linkAccuracy">0.0%</strong></span>
+                        <span class="meta-item">
+                            <span class="meta-icon">📈</span>
+                            Expected: <strong id="linkExpected">0.00%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🎯</span>
+                            Accuracy: <strong id="linkAccuracy">0.0%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🔄</span>
+                            Takeovers: <strong id="linkTakeoversCount">0</strong>
+                        </span>
+                    </div>
+                    <div class="mini-chart" id="linkMiniChart">
+                        <canvas id="linkMiniCanvas"></canvas>
                     </div>
                 </div>
             </div>
 
+            <!-- ETH Card -->
             <div class="summary-card" data-coin="ETH">
                 <div class="coin-header">
-                    <span class="coin-icon">⟠</span>
-                    <span class="coin-name">Ethereum</span>
-                    <span class="coin-price" id="ethPrice">$0.00</span>
+                    <div class="coin-info">
+                        <span class="coin-icon">⟠</span>
+                        <span class="coin-name">Ethereum</span>
+                        <span class="coin-symbol">ETH</span>
+                    </div>
+                    <div class="coin-price" id="ethPrice">$0.00</div>
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="ethCall">
@@ -760,53 +1036,145 @@
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="ethModel">Loading...</span>
+                        <span class="model-tag">🧠</span>
                     </div>
                     <div class="prediction-meta">
-                        <span>Expected: <strong id="ethExpected">0.00%</strong></span>
-                        <span>Accuracy: <strong id="ethAccuracy">0.0%</strong></span>
+                        <span class="meta-item">
+                            <span class="meta-icon">📈</span>
+                            Expected: <strong id="ethExpected">0.00%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🎯</span>
+                            Accuracy: <strong id="ethAccuracy">0.0%</strong>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-icon">🔄</span>
+                            Takeovers: <strong id="ethTakeoversCount">0</strong>
+                        </span>
+                    </div>
+                    <div class="mini-chart" id="ethMiniChart">
+                        <canvas id="ethMiniCanvas"></canvas>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- SECTION 3: MAIN CHARTS (3 Columns) -->
+        <!-- SECTION 3: ENHANCED CHARTS WITH CONTROLS -->
         <div class="charts-grid">
-            <div class="chart-card">
+            <!-- BTC Chart -->
+            <div class="chart-card" data-coin="BTC">
                 <div class="chart-header">
-                    <h3>₿ Bitcoin</h3>
+                    <div class="chart-title">
+                        <h3>₿ Bitcoin</h3>
+                        <span class="chart-coin-symbol">BTC</span>
+                    </div>
                     <div class="chart-controls">
-                        <span class="model-badge" id="btcModelBadge">🧠 Loading...</span>
-                        <span class="takeover-count" id="btcTakeovers">0 takeovers</span>
+                        <div class="timeframe-selector chart-tf">
+                            <button class="tf-btn active" data-days="7">1W</button>
+                            <button class="tf-btn" data-days="14">2W</button>
+                            <button class="tf-btn" data-days="30">1M</button>
+                            <button class="tf-btn" data-days="60">2M</button>
+                            <button class="tf-btn" data-days="90">3M</button>
+                        </div>
+                        <button class="chart-action-btn" data-action="fullscreen" title="Full Screen">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="legend" title="Toggle Legend">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="download" title="Download Chart">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="chart-wrapper" id="btcChartWrapper">
+                <div class="chart-legend" id="btcLegend">
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="chart-wrapper">
                     <canvas id="btcChart"></canvas>
                 </div>
+                <div class="chart-footer">
+                    <span class="model-badge" id="btcModelBadge">🧠 Loading...</span>
+                    <span class="takeover-count" id="btcTakeovers">0 takeovers</span>
+                    <span class="prediction-horizon">24H Horizon</span>
+                </div>
             </div>
 
-            <div class="chart-card">
+            <!-- LINK Chart -->
+            <div class="chart-card" data-coin="LINK">
                 <div class="chart-header">
-                    <h3>🔗 Chainlink</h3>
+                    <div class="chart-title">
+                        <h3>🔗 Chainlink</h3>
+                        <span class="chart-coin-symbol">LINK</span>
+                    </div>
                     <div class="chart-controls">
-                        <span class="model-badge" id="linkModelBadge">🧠 Loading...</span>
-                        <span class="takeover-count" id="linkTakeovers">0 takeovers</span>
+                        <div class="timeframe-selector chart-tf">
+                            <button class="tf-btn active" data-days="7">1W</button>
+                            <button class="tf-btn" data-days="14">2W</button>
+                            <button class="tf-btn" data-days="30">1M</button>
+                            <button class="tf-btn" data-days="60">2M</button>
+                            <button class="tf-btn" data-days="90">3M</button>
+                        </div>
+                        <button class="chart-action-btn" data-action="fullscreen" title="Full Screen">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="legend" title="Toggle Legend">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="download" title="Download Chart">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="chart-wrapper" id="linkChartWrapper">
+                <div class="chart-legend" id="linkLegend">
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="chart-wrapper">
                     <canvas id="linkChart"></canvas>
                 </div>
+                <div class="chart-footer">
+                    <span class="model-badge" id="linkModelBadge">🧠 Loading...</span>
+                    <span class="takeover-count" id="linkTakeovers">0 takeovers</span>
+                    <span class="prediction-horizon">24H Horizon</span>
+                </div>
             </div>
 
-            <div class="chart-card">
+            <!-- ETH Chart -->
+            <div class="chart-card" data-coin="ETH">
                 <div class="chart-header">
-                    <h3>⟠ Ethereum</h3>
+                    <div class="chart-title">
+                        <h3>⟠ Ethereum</h3>
+                        <span class="chart-coin-symbol">ETH</span>
+                    </div>
                     <div class="chart-controls">
-                        <span class="model-badge" id="ethModelBadge">🧠 Loading...</span>
-                        <span class="takeover-count" id="ethTakeovers">0 takeovers</span>
+                        <div class="timeframe-selector chart-tf">
+                            <button class="tf-btn active" data-days="7">1W</button>
+                            <button class="tf-btn" data-days="14">2W</button>
+                            <button class="tf-btn" data-days="30">1M</button>
+                            <button class="tf-btn" data-days="60">2M</button>
+                            <button class="tf-btn" data-days="90">3M</button>
+                        </div>
+                        <button class="chart-action-btn" data-action="fullscreen" title="Full Screen">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="legend" title="Toggle Legend">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        </button>
+                        <button class="chart-action-btn" data-action="download" title="Download Chart">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="chart-wrapper" id="ethChartWrapper">
+                <div class="chart-legend" id="ethLegend">
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="chart-wrapper">
                     <canvas id="ethChart"></canvas>
+                </div>
+                <div class="chart-footer">
+                    <span class="model-badge" id="ethModelBadge">🧠 Loading...</span>
+                    <span class="takeover-count" id="ethTakeovers">0 takeovers</span>
+                    <span class="prediction-horizon">24H Horizon</span>
                 </div>
             </div>
         </div>
@@ -821,7 +1189,6 @@
                     <button class="compare-btn" data-metric="takeovers">Takeovers</button>
                 </div>
             </div>
-
             <div class="comparison-grid" id="comparisonGrid">
                 <!-- Dynamically populated -->
             </div>
@@ -876,14 +1243,13 @@
                 </div>
             </div>
         </div>
-
     </div>
   </div>
 
   <!-- VIEW 2: LAB TAB -->
   <div id="view-lab" class="hidden">
     <p class="text-xs uppercase tracking-wider text-[#4A90E2] font-bold mb-3 mt-4">Challenger — Stable Model</p>
-    <section id="challengerLiveCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="challengerLiveCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2">
         <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Challenger — Live Read</p>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'challengerNote')">ⓘ Info</button>
@@ -892,18 +1258,18 @@
       <div id="challengerLiveBody"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
-    <section id="challengerCalibCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="challengerCalibCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <h2 class="text-sm font-bold text-[#1A1A2E] mb-3">Challenger vs. Baselines</h2>
       <div id="challengerCalibBody"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
-    <section id="challengerRecapCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="challengerRecapCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <h2 class="text-sm font-bold text-[#1A1A2E] mb-3">Recent Predictions</h2>
       <div id="challengerRecapBody" style="max-height:320px;overflow-y:auto"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
     <p class="text-xs uppercase tracking-wider text-[#718096] font-bold mb-3 mt-8">Experimental — undecided design choices</p>
-    <section id="labWeightingCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="labWeightingCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2">
         <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Combined Accuracy — which formula?</p>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labWeightingNote')">ⓘ Info</button>
@@ -912,7 +1278,7 @@
       <div id="labWeightingBody"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
-    <section id="labHeroCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="labHeroCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-3">
         <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Hero label — which name?</p>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labHeroNote')">ⓘ Info</button>
@@ -921,7 +1287,7 @@
       <div id="labHeroBody" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
     </section>
 
-    <section id="selectedModelCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="selectedModelCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2">
         <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">Selected Model — <span id="selectedModelCoinLabel">BTC · 24H</span></p>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'selectedModelNote')">ⓘ Info</button>
@@ -933,7 +1299,7 @@
 
   <!-- VIEW 3: AI LEARNING TAB -->
   <div id="view-learning" class="hidden">
-    <section id="learnStatusCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="learnStatusCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div>
           <h2 class="text-base font-bold text-[#1A1A2E]">AI Learning</h2>
@@ -951,7 +1317,7 @@
     </section>
 
     <!-- Side-by-Side BTC vs LINK vs ETH Comparison Section -->
-    <section id="learnComparisonCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+    <section id="learnComparisonCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2">
         <div>
           <h2 class="text-base font-bold text-[#1A1A2E]">Crypto Prediction Model Comparison</h2>
@@ -982,7 +1348,7 @@
 </div>
 
 <!-- Bottom mobile nav -->
-<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 px-1 bg-white border-t border-[#E2E8F0] z-50 card-shadow">
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 px-1 bg-white border-t border-[#E2E8F0] z-50 shadow-xs">
   <button data-view="dashboard" class="nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-colors shrink-0">
     <span class="material-symbols-outlined text-[20px]">monitoring</span>
     <span class="text-[10px] font-semibold uppercase tracking-wide">Dashboard</span>
@@ -1006,9 +1372,10 @@ function toggleNote(btn, noteId){
 }
 
 // ============================================================
-// 1. CONFIGURATION & CONSTANTS
+// 1. CONFIGURATION & STATE - V3
 // ============================================================
 
+const VERSION = 'V3';
 const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
 const COINS = ['BTC', 'LINK', 'ETH'];
 const COIN_NAMES = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
@@ -1018,6 +1385,7 @@ const COIN_COLORS = { BTC: '#F7931A', LINK: '#2A5ADA', ETH: '#627EEA' };
 const MODEL_COLORS = {
   'Original k-NN': '#4A90E2',
   'Experimental': '#9B59B6',
+  'Experimental (adaptive-K)': '#9B59B6',
   'k-NN Calibrated': '#1ABC9C',
   'Challenger Flat': '#F39C12',
   'Challenger Tilted': '#E67E22',
@@ -1040,812 +1408,1035 @@ const SELECTION_VARIANT_LABELS = {
   challenger_calibrated: 'Challenger Calibrated'
 };
 
-let currentDays = 7;
-let chartInstances = { BTC: null, LINK: null, ETH: null };
-let allData = { BTC: null, LINK: null, ETH: null };
+const MODEL_ORDER = [
+  'Original k-NN',
+  'Experimental (adaptive-K)',
+  'k-NN Calibrated',
+  'Challenger Flat',
+  'Challenger Tilted',
+  'Challenger Calibrated',
+  'Condition-Matched Selection'
+];
 
-let currentCoin = 'BTC';
-let currentHorizon = 24;
+let currentData = { BTC: null, LINK: null, ETH: null };
+let chartInstances = { BTC: null, LINK: null, ETH: null };
+let miniChartInstances = { BTC: null, LINK: null, ETH: null };
+let chartDays = { BTC: 7, LINK: 7, ETH: 7 };
+let chartLegendsVisible = { BTC: true, LINK: true, ETH: true };
 let activeView = (location.hash || '').replace('#', '') || 'dashboard';
 
 // ============================================================
-// 2. API INTEGRATION & DATA FETCHING
+// 2. FIELD NORMALIZATION HELPERS
+// ============================================================
+
+const FIELD_MAPPINGS = {
+  direction: ['direction', 'call_direction'],
+  confidence: ['confidence', 'confidence_score'],
+  expectedMove: ['expectedMove', 'median_analog_return', 'expected_return_pct'],
+  actualMove: ['actualMove', 'real_return_pct', 'actual_return'],
+  correct: ['correct', 'is_correct', 'accuracy_flag'],
+  selected_variant: ['selected_variant', 'chosen_variant', 'model_name'],
+  eligible_variants: ['eligible_variants', 'model_variants', 'candidate_models'],
+  timestamp: ['timestamp', 'ts', 'time', 'date'],
+  price: ['price', 'close', 'value', 'btc_price', 'link_price', 'eth_price']
+};
+
+function normalizePrediction(prediction) {
+  if (!prediction) return {};
+  const normalized = { ...prediction };
+
+  // Timestamp
+  const ts = prediction.ts || prediction.timestamp || prediction.time || prediction.date;
+  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
+  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+
+  // p_up & direction
+  const pUp = prediction.p_up !== undefined && prediction.p_up !== null ? parseFloat(prediction.p_up) : null;
+  if (pUp !== null) {
+    normalized.p_up = pUp;
+    normalized.direction = pUp >= 0.5 ? 'UP' : 'DOWN';
+    normalized.confidence = Math.round((pUp >= 0.5 ? pUp : 1 - pUp) * 100);
+  } else if (prediction.direction) {
+    normalized.direction = String(prediction.direction).toUpperCase();
+    normalized.confidence = prediction.confidence ? Math.round(parseFloat(prediction.confidence)) : 75;
+  } else {
+    normalized.direction = 'UP';
+    normalized.confidence = 70;
+  }
+
+  // expected move
+  const expMove = prediction.median_analog_return !== undefined ? prediction.median_analog_return : prediction.expectedMove;
+  normalized.expectedMove = expMove != null ? parseFloat(expMove).toFixed(2) : "0.00";
+
+  // actual move & correct
+  if (prediction.correct !== undefined) {
+    normalized.correct = Boolean(prediction.correct);
+  } else if (prediction.realized_up !== undefined && prediction.realized_up !== null) {
+    const isUp = normalized.direction === 'UP';
+    const wasUp = Number(prediction.realized_up) === 1;
+    normalized.correct = isUp === wasUp;
+  }
+
+  return normalized;
+}
+
+function normalizeSelection(selection) {
+  if (!selection) return {};
+  const normalized = { ...selection };
+  const rawVariant = selection.chosen_variant || selection.selected_variant || selection.model_name || 'Original k-NN';
+  normalized.selected_variant = SELECTION_VARIANT_LABELS[rawVariant] || rawVariant;
+
+  const ts = selection.ts || selection.timestamp || selection.time;
+  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
+  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+
+  return normalized;
+}
+
+function normalizePricePoint(pricePoint) {
+  if (!pricePoint) return {};
+  const normalized = { ...pricePoint };
+  const priceVal = pricePoint.price !== undefined ? pricePoint.price :
+                   pricePoint.btc_price !== undefined ? pricePoint.btc_price :
+                   pricePoint.link_price !== undefined ? pricePoint.link_price :
+                   pricePoint.eth_price !== undefined ? pricePoint.eth_price :
+                   pricePoint.close !== undefined ? pricePoint.close : 0;
+  normalized.price = parseFloat(priceVal || 0);
+
+  const ts = pricePoint.ts || pricePoint.timestamp || pricePoint.time || pricePoint.date;
+  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
+  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
+
+  return normalized;
+}
+
+// ============================================================
+// 3. API INTEGRATION
 // ============================================================
 
 async function fetchCoinData(coin, days = 7) {
+  try {
+    const endpoint = coin === 'BTC' ? '/chart-data' :
+                     coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
+    const response = await fetch(`${API_BASE}${endpoint}?days=${days}&horizon=24H`);
+    if (!response.ok) throw new Error(`Failed to fetch ${coin} data (HTTP ${response.status})`);
+    const rawData = await response.json();
+
+    const predictions = (rawData.predictions || []).map(normalizePrediction);
+    const prices = (rawData.prices || []).map(normalizePricePoint);
+
+    let selections = [];
+    let selectionAvailable = false;
     try {
-        const endpoint = coin === 'BTC' ? '/chart-data' :
-                         coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
-        const response = await fetch(`${API_BASE}${endpoint}?days=${days}&horizon=24H`);
-        if (!response.ok) throw new Error(`Failed to fetch ${coin} data (HTTP ${response.status})`);
-        const data = await response.json();
-
-        // Fetch selection history
-        let selections = [];
-        let selectionAvailable = false;
-        try {
-            const selResponse = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=100`);
-            if (selResponse.ok) {
-                const selData = await selResponse.json();
-                selections = selData.decisions || selData;
-                if (Array.isArray(selections)) {
-                    selectionAvailable = true;
-                }
-            }
-        } catch (e) {
-            console.warn(`Selection history not available for ${coin}`);
+      const selResponse = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=100`);
+      if (selResponse.ok) {
+        const rawSelections = await selResponse.json();
+        const selList = Array.isArray(rawSelections) ? rawSelections : (rawSelections.decisions || []);
+        if (selList.length > 0) {
+          selections = selList.map(normalizeSelection);
+          selectionAvailable = true;
         }
-
-        // If no selections, generate fallback
-        if (!selectionAvailable || !Array.isArray(selections) || selections.length === 0) {
-            selections = generateFallbackSelections(data.predictions || []);
-        }
-
-        // Normalize decisions array
-        const normalizedSelections = selections.map(s => ({
-            timestamp: s.timestamp || (s.ts ? new Date(s.ts).toISOString() : new Date().toISOString()),
-            selected_variant: s.chosen_variant || s.selected_variant || 'Original k-NN',
-            reason: s.reason || ''
-        }));
-
-        // Get current model
-        const lastSel = normalizedSelections[normalizedSelections.length - 1];
-        const rawCurrentModel = lastSel ? lastSel.selected_variant : 'Original k-NN';
-        const currentModel = SELECTION_VARIANT_LABELS[rawCurrentModel] || rawCurrentModel;
-
-        // Calculate model distribution
-        const distribution = {};
-        normalizedSelections.forEach(s => {
-            const modelKey = s.selected_variant;
-            const modelLabel = SELECTION_VARIANT_LABELS[modelKey] || modelKey;
-            distribution[modelLabel] = (distribution[modelLabel] || 0) + 1;
-        });
-
-        // Calculate takeovers
-        let takeovers = 0;
-        let lastModel = null;
-        const takeoverEvents = [];
-
-        normalizedSelections.forEach((s, i) => {
-            const modelLabel = SELECTION_VARIANT_LABELS[s.selected_variant] || s.selected_variant;
-            if (lastModel && modelLabel !== lastModel) {
-                takeovers++;
-                takeoverEvents.push({
-                    date: s.timestamp,
-                    from: lastModel,
-                    to: modelLabel,
-                    index: i
-                });
-            }
-            lastModel = modelLabel;
-        });
-
-        return {
-            coin,
-            predictions: data.predictions || [],
-            prices: data.prices || [],
-            selections: normalizedSelections,
-            currentModel,
-            distribution,
-            takeovers,
-            takeoverEvents,
-            selectionAvailable
-        };
-    } catch (error) {
-        console.warn(`Error fetching ${coin} data:`, error);
-        return generateMockCoinData(coin);
+      }
+    } catch (e) {
+      console.warn(`Selection history not available for ${coin}`);
     }
-}
 
-function generateFallbackSelections(predictions) {
-    const models = ['original', 'experimental', 'challenger_flat'];
-    return predictions.map((pred, index) => ({
-        timestamp: pred.timestamp || (pred.ts ? new Date(pred.ts).toISOString() : new Date().toISOString()),
-        selected_variant: models[index % models.length],
-        eligible_variants: models
-    }));
-}
-
-function generateMockCoinData(coin) {
-    const now = new Date();
-    const predictions = [];
-    const prices = [];
-    const selections = [];
-    const models = ['Original k-NN', 'Experimental (adaptive-K)', 'k-NN Calibrated', 'Challenger Flat'];
-    let basePrice = coin === 'BTC' ? 64200 : coin === 'LINK' ? 14.80 : 3450;
-
-    for (let i = 30; i >= 0; i--) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const price = basePrice + (Math.random() - 0.48) * basePrice * 0.04;
-        const direction = Math.random() > 0.48 ? 'UP' : 'DOWN';
-        const confidence = 55 + Math.random() * 35;
-        const correct = Math.random() > 0.45;
-        const model = models[Math.floor(Math.random() * models.length)];
-
-        predictions.push({
-            ts: date.getTime(),
-            timestamp: date.toISOString(),
-            direction: direction,
-            p_up: direction === 'UP' ? confidence / 100 : (100 - confidence) / 100,
-            confidence: Math.round(confidence),
-            expectedMove: ((Math.random() * 4) - 2).toFixed(2),
-            median_analog_return: parseFloat(((Math.random() * 4) - 2).toFixed(2)),
-            actualMove: correct ? (Math.random() * 2).toFixed(2) : (Math.random() * -2).toFixed(2),
-            correct: correct,
-            realized_up: correct ? (direction === 'UP' ? 1 : 0) : (direction === 'UP' ? 0 : 1)
-        });
-
-        prices.push({
-            ts: date.getTime(),
-            timestamp: date.toISOString(),
-            price: parseFloat(price.toFixed(2)),
-            btc_price: coin === 'BTC' ? parseFloat(price.toFixed(2)) : undefined,
-            link_price: coin === 'LINK' ? parseFloat(price.toFixed(2)) : undefined,
-            eth_price: coin === 'ETH' ? parseFloat(price.toFixed(2)) : undefined
-        });
-
-        selections.push({
-            timestamp: date.toISOString(),
-            selected_variant: model,
-            eligible_variants: models
-        });
+    if (!selections || selections.length === 0) {
+      selections = generateFallbackSelections(predictions);
     }
+
+    const currentModel = selections.length > 0
+      ? selections[selections.length - 1].selected_variant
+      : 'Original k-NN';
 
     const distribution = {};
     selections.forEach(s => {
-        const m = s.selected_variant || 'Original k-NN';
-        distribution[m] = (distribution[m] || 0) + 1;
+      const model = s.selected_variant || 'Original k-NN';
+      distribution[model] = (distribution[model] || 0) + 1;
     });
 
     let takeovers = 0;
     let lastModel = null;
     const takeoverEvents = [];
+
     selections.forEach((s, i) => {
-        if (lastModel && s.selected_variant !== lastModel) {
-            takeovers++;
-            takeoverEvents.push({
-                date: s.timestamp,
-                from: lastModel,
-                to: s.selected_variant,
-                index: i
-            });
-        }
-        lastModel = s.selected_variant;
+      const modelLabel = s.selected_variant || 'Original k-NN';
+      if (lastModel && modelLabel !== lastModel) {
+        takeovers++;
+        takeoverEvents.push({
+          date: s.timestamp,
+          from: lastModel,
+          to: modelLabel,
+          index: i
+        });
+      }
+      lastModel = modelLabel;
     });
 
     return {
-        coin,
-        predictions,
-        prices,
-        selections,
-        currentModel: selections[selections.length - 1]?.selected_variant || 'Original k-NN',
-        distribution,
-        takeovers,
-        takeoverEvents,
-        selectionAvailable: false
+      coin,
+      predictions,
+      prices,
+      selections,
+      currentModel,
+      distribution,
+      takeovers,
+      takeoverEvents,
+      selectionAvailable
     };
+  } catch (error) {
+    console.warn(`Error fetching ${coin} data:`, error);
+    return generateMockCoinData(coin);
+  }
+}
+
+function generateFallbackSelections(predictions) {
+  const models = ['Original k-NN', 'Experimental (adaptive-K)', 'Challenger Flat'];
+  return predictions.map((pred, index) => ({
+    timestamp: pred.timestamp || new Date().toISOString(),
+    ts: pred.ts || Date.now(),
+    selected_variant: models[index % models.length],
+    eligible_variants: models
+  }));
+}
+
+function generateMockCoinData(coin) {
+  const now = new Date();
+  const predictions = [];
+  const prices = [];
+  const selections = [];
+  const models = ['Original k-NN', 'Experimental (adaptive-K)', 'k-NN Calibrated', 'Challenger Flat'];
+  let basePrice = coin === 'BTC' ? 64200 : coin === 'LINK' ? 14.80 : 3450;
+
+  for (let i = 30; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const price = basePrice + (Math.random() - 0.48) * basePrice * 0.04;
+    const direction = Math.random() > 0.48 ? 'UP' : 'DOWN';
+    const confidence = 55 + Math.random() * 35;
+    const correct = Math.random() > 0.45;
+    const model = models[Math.floor(Math.random() * models.length)];
+
+    predictions.push(normalizePrediction({
+      ts: date.getTime(),
+      timestamp: date.toISOString(),
+      direction: direction,
+      p_up: direction === 'UP' ? confidence / 100 : (100 - confidence) / 100,
+      confidence: Math.round(confidence),
+      expectedMove: ((Math.random() * 4) - 2).toFixed(2),
+      correct: correct
+    }));
+
+    prices.push(normalizePricePoint({
+      ts: date.getTime(),
+      timestamp: date.toISOString(),
+      price: parseFloat(price.toFixed(2))
+    }));
+
+    selections.push(normalizeSelection({
+      timestamp: date.toISOString(),
+      ts: date.getTime(),
+      selected_variant: model,
+      eligible_variants: models
+    }));
+  }
+
+  const distribution = {};
+  selections.forEach(s => {
+    const m = s.selected_variant || 'Original k-NN';
+    distribution[m] = (distribution[m] || 0) + 1;
+  });
+
+  let takeovers = 0;
+  let lastModel = null;
+  const takeoverEvents = [];
+  selections.forEach((s, i) => {
+    if (lastModel && s.selected_variant !== lastModel) {
+      takeovers++;
+      takeoverEvents.push({
+        date: s.timestamp,
+        from: lastModel,
+        to: s.selected_variant,
+        index: i
+      });
+    }
+    lastModel = s.selected_variant;
+  });
+
+  return {
+    coin,
+    predictions,
+    prices,
+    selections,
+    currentModel: selections[selections.length - 1]?.selected_variant || 'Original k-NN',
+    distribution,
+    takeovers,
+    takeoverEvents,
+    selectionAvailable: false
+  };
 }
 
 // ============================================================
-// 3. LOAD & UPDATE DASHBOARD UI
+// 4. LOAD & REFRESH DATA
 // ============================================================
 
-async function loadAllData(days = 7) {
-    const results = await Promise.all(
-        COINS.map(coin => fetchCoinData(coin, days))
-    );
+async function loadAllData() {
+  const results = await Promise.all(
+    COINS.map(coin => fetchCoinData(coin, chartDays[coin] || 7))
+  );
 
-    results.forEach((data) => {
-        allData[data.coin] = data;
-    });
+  results.forEach((data) => {
+    currentData[data.coin] = data;
+  });
 
-    // Update data status badge
-    const statusEl = document.getElementById('dataStatus');
-    if (statusEl) {
-        const usingMock = Object.values(allData).some(d => !d.selectionAvailable);
-        if (usingMock) {
-            statusEl.textContent = '⚠️ Simulated / partial fallback';
-            statusEl.className = 'status-badge status-warning';
-        } else {
-            statusEl.textContent = '✅ Live data';
-            statusEl.className = 'status-badge status-ok';
-        }
+  const statusEl = document.getElementById('dataStatus');
+  if (statusEl) {
+    const usingMock = Object.values(currentData).some(d => !d || !d.selectionAvailable);
+    if (usingMock) {
+      statusEl.textContent = '⚠️ Simulated / partial fallback';
+      statusEl.className = 'status-badge status-warning';
+    } else {
+      statusEl.textContent = '✅ Live data';
+      statusEl.className = 'status-badge status-ok';
     }
+  }
 
-    // Update UI components
-    updateSummaryCards();
-    renderCharts();
-    updateComparison();
-    updateTimelines();
-    updateDistributions();
+  updateSummaryCards();
+  renderMiniCharts();
+  renderCharts();
+  updateComparison();
+  updateTimelines();
+  updateDistributions();
+  updateChartLegends();
 
-    // Update timestamp
-    const timeEl = document.getElementById('updateTime');
-    if (timeEl) {
-        timeEl.textContent = `Updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
-    }
+  updateTimestamp();
+}
+
+function updateTimestamp() {
+  const el = document.getElementById('updateTime');
+  if (el) {
+    el.textContent = `Updated: ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'})}`;
+  }
 }
 
 // ============================================================
-// 4. SUMMARY CARDS
+// 5. UPDATE SUMMARY CARDS & MINI CHARTS
 // ============================================================
 
 function updateSummaryCards() {
-    COINS.forEach(coin => {
-        const data = allData[coin];
-        if (!data) return;
+  COINS.forEach(coin => {
+    const data = currentData[coin];
+    if (!data) return;
 
-        const lastPred = data.predictions[data.predictions.length - 1];
-        const lastPrice = data.prices[data.prices.length - 1];
+    const lastPred = data.predictions[data.predictions.length - 1];
+    const lastPrice = data.prices[data.prices.length - 1];
 
-        // Price
-        const priceEl = document.getElementById(`${coin.toLowerCase()}Price`);
-        if (priceEl && lastPrice) {
-            const rawVal = lastPrice.price || lastPrice.btc_price || lastPrice.link_price || lastPrice.eth_price || 0;
-            const formatter = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                minimumFractionDigits: coin === 'LINK' ? 2 : 0,
-                maximumFractionDigits: coin === 'LINK' ? 2 : 2
-            });
-            priceEl.textContent = formatter.format(rawVal);
-        }
+    // Price
+    const priceEl = document.getElementById(`${coin.toLowerCase()}Price`);
+    if (priceEl && lastPrice) {
+      const formatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: coin === 'LINK' ? 2 : 0,
+        maximumFractionDigits: coin === 'LINK' ? 2 : 2
+      });
+      priceEl.textContent = formatter.format(lastPrice.price);
+    }
 
-        // Direction Call & Confidence
-        const callEl = document.getElementById(`${coin.toLowerCase()}Call`);
-        if (callEl && lastPred) {
-            const pUp = lastPred.p_up != null ? lastPred.p_up : (lastPred.direction === 'UP' ? 0.8 : 0.2);
-            const isUp = pUp >= 0.5;
-            const direction = isUp ? 'UP' : 'DOWN';
-            const confidence = Math.round((isUp ? pUp : 1 - pUp) * 100);
+    // Call & Confidence
+    const callEl = document.getElementById(`${coin.toLowerCase()}Call`);
+    if (callEl && lastPred) {
+      const direction = lastPred.direction;
+      const confidence = lastPred.confidence;
+      callEl.innerHTML = `
+        <span class="direction ${direction === 'UP' ? 'up' : 'down'}">
+          ${direction === 'UP' ? '▲' : '▼'} ${direction === 'UP' ? 'BULLISH' : 'BEARISH'}
+        </span>
+        <span class="confidence">${confidence}%</span>
+      `;
+    }
 
-            callEl.innerHTML = `
-                <span class="direction ${isUp ? 'up' : 'down'}">
-                    ${isUp ? '▲' : '▼'} ${isUp ? 'BULLISH' : 'BEARISH'}
-                </span>
-                <span class="confidence">${confidence}%</span>
-            `;
-        }
+    // Model
+    const modelEl = document.getElementById(`${coin.toLowerCase()}Model`);
+    if (modelEl) {
+      modelEl.textContent = data.currentModel;
+    }
 
-        // Model Name
-        const modelEl = document.getElementById(`${coin.toLowerCase()}Model`);
-        if (modelEl) {
-            modelEl.textContent = data.currentModel;
-        }
+    // Expected move
+    const expectedEl = document.getElementById(`${coin.toLowerCase()}Expected`);
+    if (expectedEl && lastPred) {
+      const move = parseFloat(lastPred.expectedMove);
+      expectedEl.textContent = (move > 0 ? '+' : '') + move.toFixed(2) + '%';
+      expectedEl.style.color = move >= 0 ? '#2ECC71' : '#E74C3C';
+    }
 
-        // Expected move
-        const expectedEl = document.getElementById(`${coin.toLowerCase()}Expected`);
-        if (expectedEl && lastPred) {
-            const move = lastPred.median_analog_return != null ? lastPred.median_analog_return : parseFloat(lastPred.expectedMove || 0);
-            expectedEl.textContent = (move > 0 ? '+' : '') + move.toFixed(2) + '%';
-            expectedEl.style.color = move >= 0 ? '#2ECC71' : '#E74C3C';
-        }
+    // Accuracy
+    const accuracyEl = document.getElementById(`${coin.toLowerCase()}Accuracy`);
+    if (accuracyEl) {
+      const correct = data.predictions.filter(p => p.correct === true).length;
+      const total = data.predictions.filter(p => p.correct !== undefined && p.correct !== null).length;
+      const acc = total > 0 ? (correct / total * 100) : 52.0;
+      accuracyEl.textContent = acc.toFixed(1) + '%';
+    }
 
-        // Accuracy
-        const accuracyEl = document.getElementById(`${coin.toLowerCase()}Accuracy`);
-        if (accuracyEl) {
-            let correct = 0;
-            let total = 0;
+    // Takeovers count
+    const takeoversEl = document.getElementById(`${coin.toLowerCase()}TakeoversCount`);
+    if (takeoversEl) {
+      takeoversEl.textContent = data.takeovers;
+    }
+  });
+}
 
-            data.predictions.forEach(p => {
-                if (p.correct !== undefined) {
-                    if (p.correct) correct++;
-                    total++;
-                } else if (p.realized_up !== null && p.realized_up !== undefined) {
-                    const isUp = (p.p_up != null ? p.p_up : (p.direction === 'UP' ? 0.8 : 0.2)) >= 0.5;
-                    const wasUp = p.realized_up === 1;
-                    if (isUp === wasUp) correct++;
-                    total++;
-                }
-            });
+function renderMiniCharts() {
+  COINS.forEach(coin => {
+    renderSingleMiniChart(coin);
+  });
+}
 
-            const acc = total > 0 ? (correct / total * 100) : 52.0;
-            accuracyEl.textContent = acc.toFixed(1) + '%';
-        }
-    });
+function renderSingleMiniChart(coin) {
+  const data = currentData[coin];
+  if (!data) return;
+
+  const canvas = document.getElementById(`${coin.toLowerCase()}MiniCanvas`);
+  if (!canvas) return;
+
+  if (miniChartInstances[coin]) {
+    miniChartInstances[coin].destroy();
+    miniChartInstances[coin] = null;
+  }
+
+  const days = chartDays[coin] || 7;
+  const sliceIndex = Math.max(0, data.prices.length - days);
+  const slicedPrices = data.prices.slice(sliceIndex);
+
+  const ctx = canvas.getContext('2d');
+  const prices = slicedPrices.map(p => p.price);
+  const labels = slicedPrices.map(p => p.timestamp);
+
+  miniChartInstances[coin] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: prices,
+        borderColor: COIN_COLORS[coin] || '#4A90E2',
+        borderWidth: 2,
+        fill: false,
+        pointRadius: 0,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false }
+      },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      }
+    }
+  });
 }
 
 // ============================================================
-// 5. SIDE-BY-SIDE CHARTS
+// 6. RENDER CHARTS (INDEPENDENT TIMEFRAMES)
 // ============================================================
 
 function renderCharts() {
-    COINS.forEach(coin => {
-        const data = allData[coin];
-        if (!data) return;
+  COINS.forEach(coin => {
+    renderSingleChart(coin);
+  });
+}
 
-        const wrapper = document.getElementById(`${coin.toLowerCase()}ChartWrapper`);
-        if (wrapper) {
-            wrapper.innerHTML = `<canvas id="${coin.toLowerCase()}Chart"></canvas>`;
-        }
+function renderSingleChart(coin) {
+  const data = currentData[coin];
+  if (!data) return;
 
-        const canvas = document.getElementById(`${coin.toLowerCase()}Chart`);
-        if (!canvas) return;
+  const canvas = document.getElementById(`${coin.toLowerCase()}Chart`);
+  if (!canvas) return;
 
-        // Destroy existing chart
-        if (chartInstances[coin]) {
-            chartInstances[coin].destroy();
-            chartInstances[coin] = null;
-        }
+  if (chartInstances[coin]) {
+    chartInstances[coin].destroy();
+    chartInstances[coin] = null;
+  }
 
-        // Prepare price data
-        const priceData = data.prices.map(p => ({
-            x: p.ts || new Date(p.timestamp).getTime(),
-            y: p.price || p.btc_price || p.link_price || p.eth_price || 0
-        }));
+  const days = chartDays[coin] || 7;
+  const sliceIndex = Math.max(0, data.prices.length - days);
+  const slicedPrices = data.prices.slice(sliceIndex);
+  const slicedPredictions = data.predictions.slice(sliceIndex);
+  const slicedSelections = data.selections.slice(sliceIndex);
 
-        // Group predictions by model
-        const modelGroups = {};
-        data.predictions.forEach((pred, index) => {
-            const sel = data.selections[index] || { selected_variant: 'Original k-NN' };
-            const rawModel = sel.selected_variant;
-            const model = SELECTION_VARIANT_LABELS[rawModel] || rawModel;
+  const priceData = slicedPrices.map(p => ({
+    x: p.ts || new Date(p.timestamp).getTime(),
+    y: p.price
+  }));
 
-            if (!modelGroups[model]) modelGroups[model] = [];
-            const pricePoint = data.prices[index] || data.prices[data.prices.length - 1] || { price: 0 };
-            const priceVal = pricePoint.price || pricePoint.btc_price || pricePoint.link_price || pricePoint.eth_price || 0;
+  const modelGroups = {};
+  slicedPredictions.forEach((pred, index) => {
+    const sel = slicedSelections[index] || { selected_variant: 'Original k-NN' };
+    const model = sel.selected_variant;
+    if (!modelGroups[model]) modelGroups[model] = [];
+    const priceVal = slicedPrices[index]?.price || 0;
 
-            modelGroups[model].push({
-                x: pred.ts || new Date(pred.timestamp).getTime(),
-                y: priceVal,
-                prediction: pred,
-                model: model
-            });
-        });
-
-        // Build datasets
-        const datasets = [
-            {
-                label: `${coin} Price`,
-                data: priceData,
-                borderColor: COIN_COLORS[coin] || '#1A1A2E',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.1,
-                pointRadius: 0,
-                order: 2
-            }
-        ];
-
-        // Model prediction points
-        Object.keys(modelGroups).forEach(model => {
-            const points = modelGroups[model];
-            if (points.length === 0) return;
-            const color = MODEL_COLORS[model] || '#4A90E2';
-            datasets.push({
-                label: model,
-                data: points,
-                backgroundColor: color,
-                borderColor: '#FFFFFF',
-                borderWidth: 2,
-                pointRadius: 6,
-                pointHoverRadius: 9,
-                showLine: false,
-                order: 1,
-                pointStyle: function(context) {
-                    const raw = context.raw;
-                    if (!raw || !raw.prediction) return 'circle';
-                    const p = raw.prediction;
-                    const isUp = (p.p_up != null ? p.p_up : (p.direction === 'UP' ? 0.8 : 0.2)) >= 0.5;
-                    return isUp ? 'triangle' : 'circle';
-                },
-                rotation: function(context) {
-                    const raw = context.raw;
-                    if (!raw || !raw.prediction) return 0;
-                    const p = raw.prediction;
-                    const isUp = (p.p_up != null ? p.p_up : (p.direction === 'UP' ? 0.8 : 0.2)) >= 0.5;
-                    return isUp ? 0 : 180;
-                }
-            });
-        });
-
-        // Takeover markers
-        const switchPoints = [];
-        let lastModel = null;
-        data.selections.forEach((sel, index) => {
-            const rawModel = sel.selected_variant;
-            const modelLabel = SELECTION_VARIANT_LABELS[rawModel] || rawModel;
-
-            if (lastModel && modelLabel !== lastModel) {
-                const pricePoint = data.prices[index] || data.prices[data.prices.length - 1] || { price: 0 };
-                const priceVal = pricePoint.price || pricePoint.btc_price || pricePoint.link_price || pricePoint.eth_price || 0;
-                switchPoints.push({
-                    x: sel.ts || new Date(sel.timestamp).getTime(),
-                    y: priceVal,
-                    from: lastModel,
-                    to: modelLabel
-                });
-            }
-            lastModel = modelLabel;
-        });
-
-        if (switchPoints.length > 0) {
-            datasets.push({
-                label: 'Model Takeover',
-                data: switchPoints,
-                backgroundColor: '#E74C3C',
-                borderColor: '#FFFFFF',
-                borderWidth: 2,
-                pointRadius: 10,
-                pointHoverRadius: 13,
-                showLine: false,
-                order: 0,
-                pointStyle: 'rectRot'
-            });
-        }
-
-        // Create chart
-        chartInstances[coin] = new Chart(canvas, {
-            type: 'line',
-            data: { datasets },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'nearest',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: '#FFFFFF',
-                        borderColor: '#E2E8F0',
-                        borderWidth: 1,
-                        titleColor: '#1A1A2E',
-                        bodyColor: '#4A4A5E',
-                        padding: 10,
-                        callbacks: {
-                            label: function(context) {
-                                const raw = context.raw;
-                                if (!raw) return '';
-                                if (context.dataset.label === 'Model Takeover') {
-                                    return `⚡ Takeover: ${raw.from} → ${raw.to}`;
-                                }
-                                if (!raw.prediction) {
-                                    return `${context.dataset.label}: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`;
-                                }
-                                const p = raw.prediction;
-                                const isUp = (p.p_up != null ? p.p_up : (p.direction === 'UP' ? 0.8 : 0.2)) >= 0.5;
-                                const confPct = Math.round((isUp ? (p.p_up || 0.8) : (1 - (p.p_up || 0.2))) * 100);
-                                const move = p.median_analog_return != null ? p.median_analog_return : parseFloat(p.expectedMove || 0);
-
-                                return [
-                                    `Model: ${raw.model}`,
-                                    `Call: ${isUp ? 'BULLISH ▲' : 'BEARISH ▼'} (${confPct}% confidence)`,
-                                    `Expected move: ${move > 0 ? '+' : ''}${move.toFixed(2)}%`,
-                                    `Price @ call: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`
-                                ];
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: { unit: 'day' },
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 6, font: { size: 10 }, color: '#718096' }
-                    },
-                    y: {
-                        grid: { color: '#F0F0F0' },
-                        ticks: {
-                            callback: function(value) {
-                                return '$' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : value.toFixed(2));
-                            },
-                            font: { size: 10 },
-                            color: '#718096'
-                        }
-                    }
-                }
-            }
-        });
-
-        // Update badges
-        const badgeEl = document.getElementById(`${coin.toLowerCase()}ModelBadge`);
-        if (badgeEl) {
-            const color = MODEL_COLORS[data.currentModel] || '#4A90E2';
-            badgeEl.textContent = `🧠 ${data.currentModel}`;
-            badgeEl.style.backgroundColor = color + '1A';
-            badgeEl.style.color = color;
-        }
-
-        const takeoverEl = document.getElementById(`${coin.toLowerCase()}Takeovers`);
-        if (takeoverEl) {
-            takeoverEl.textContent = `${data.takeovers} takeover${data.takeovers !== 1 ? 's' : ''}`;
-        }
+    modelGroups[model].push({
+      x: pred.ts || new Date(pred.timestamp).getTime(),
+      y: priceVal,
+      prediction: pred,
+      model: model
     });
+  });
+
+  const datasets = [
+    {
+      label: `${coin} Price`,
+      data: priceData,
+      borderColor: COIN_COLORS[coin] || '#1A1A2E',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.1,
+      pointRadius: 0,
+      order: 2
+    }
+  ];
+
+  Object.keys(modelGroups).forEach(model => {
+    const points = modelGroups[model];
+    if (points.length === 0) return;
+    const color = MODEL_COLORS[model] || '#4A90E2';
+    datasets.push({
+      label: model,
+      data: points,
+      backgroundColor: color,
+      borderColor: '#FFFFFF',
+      borderWidth: 2,
+      pointRadius: 6,
+      pointHoverRadius: 9,
+      showLine: false,
+      order: 1,
+      pointStyle: function(context) {
+        const raw = context.raw;
+        if (!raw || !raw.prediction) return 'circle';
+        return raw.prediction.direction === 'UP' ? 'triangle' : 'circle';
+      },
+      rotation: function(context) {
+        const raw = context.raw;
+        if (!raw || !raw.prediction) return 0;
+        return raw.prediction.direction === 'UP' ? 0 : 180;
+      }
+    });
+  });
+
+  const switchPoints = [];
+  let lastModel = null;
+  slicedSelections.forEach((sel, index) => {
+    const modelLabel = sel.selected_variant;
+    if (lastModel && modelLabel !== lastModel) {
+      const priceVal = slicedPrices[index]?.price || 0;
+      switchPoints.push({
+        x: sel.ts || new Date(sel.timestamp).getTime(),
+        y: priceVal,
+        from: lastModel,
+        to: modelLabel
+      });
+    }
+    lastModel = modelLabel;
+  });
+
+  if (switchPoints.length > 0) {
+    datasets.push({
+      label: 'Model Takeover',
+      data: switchPoints,
+      backgroundColor: '#E74C3C',
+      borderColor: '#FFFFFF',
+      borderWidth: 2,
+      pointRadius: 10,
+      pointHoverRadius: 13,
+      showLine: false,
+      order: 0,
+      pointStyle: 'rectRot'
+    });
+  }
+
+  chartInstances[coin] = new Chart(canvas, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: chartLegendsVisible[coin] !== false,
+          position: 'bottom',
+          labels: {
+            usePointStyle: true,
+            padding: 8,
+            font: { size: 9 },
+            boxWidth: 10
+          }
+        },
+        tooltip: {
+          backgroundColor: '#FFFFFF',
+          borderColor: '#E2E8F0',
+          borderWidth: 1,
+          titleColor: '#1A1A2E',
+          bodyColor: '#4A4A5E',
+          padding: 10,
+          callbacks: {
+            label: function(context) {
+              const raw = context.raw;
+              if (!raw) return '';
+              if (context.dataset.label === 'Model Takeover') {
+                return `⚡ Takeover: ${raw.from} → ${raw.to}`;
+              }
+              if (!raw.prediction) {
+                return `${context.dataset.label}: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`;
+              }
+              const p = raw.prediction;
+              const status = p.correct === true ? '✅ Correct' : p.correct === false ? '❌ Wrong' : '⏳ Pending';
+              return [
+                `Model: ${raw.model}`,
+                `Call: ${p.direction === 'UP' ? 'BULLISH ▲' : 'BEARISH ▼'} (${p.confidence}% confidence)`,
+                `Expected move: ${p.expectedMove}%`,
+                `Status: ${status}`,
+                `Price: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'day' },
+          grid: { display: false },
+          ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#718096' }
+        },
+        y: {
+          grid: { color: '#F0F0F0' },
+          ticks: {
+            callback: function(value) {
+              return '$' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : value.toFixed(2));
+            },
+            font: { size: 9 },
+            color: '#718096'
+          }
+        }
+      }
+    }
+  });
+
+  const badgeEl = document.getElementById(`${coin.toLowerCase()}ModelBadge`);
+  if (badgeEl) {
+    const color = MODEL_COLORS[data.currentModel] || '#4A90E2';
+    badgeEl.textContent = `🧠 ${data.currentModel}`;
+    badgeEl.style.backgroundColor = color + '1A';
+    badgeEl.style.color = color;
+  }
+
+  const takeoverEl = document.getElementById(`${coin.toLowerCase()}Takeovers`);
+  if (takeoverEl) {
+    takeoverEl.textContent = `${data.takeovers} takeover${data.takeovers !== 1 ? 's' : ''}`;
+  }
 }
 
 // ============================================================
-// 6. COMPARISON SECTION
+// 7. CHART LEGENDS
+// ============================================================
+
+function updateChartLegends() {
+  COINS.forEach(coin => {
+    const data = currentData[coin];
+    if (!data) return;
+
+    const legendContainer = document.getElementById(`${coin.toLowerCase()}Legend`);
+    if (!legendContainer) return;
+
+    const modelCounts = {};
+    data.selections.forEach(s => {
+      const model = s.selected_variant || 'Original k-NN';
+      modelCounts[model] = (modelCounts[model] || 0) + 1;
+    });
+
+    const activeModels = Object.keys(modelCounts);
+
+    let html = '';
+    activeModels.forEach(model => {
+      const color = MODEL_COLORS[model] || '#718096';
+      html += `
+        <div class="legend-item">
+          <span class="legend-dot" style="background:${color}"></span>
+          <span class="legend-label">${model}</span>
+        </div>
+      `;
+    });
+
+    legendContainer.innerHTML = html || '<span class="legend-label">No active model history</span>';
+  });
+}
+
+// ============================================================
+// 8. COMPARISON, TIMELINES, DISTRIBUTIONS
 // ============================================================
 
 function updateComparison() {
-    const grid = document.getElementById('comparisonGrid');
-    if (!grid) return;
+  const grid = document.getElementById('comparisonGrid');
+  if (!grid) return;
 
-    const activeMetric = document.querySelector('.compare-btn.active')?.dataset.metric || 'accuracy';
+  const activeMetric = document.querySelector('.compare-btn.active')?.dataset.metric || 'accuracy';
 
-    let html = '';
-    COINS.forEach(coin => {
-        const data = allData[coin];
-        if (!data) return;
+  let html = '';
+  COINS.forEach(coin => {
+    const data = currentData[coin];
+    if (!data) return;
 
-        let correct = 0;
-        let total = 0;
-        data.predictions.forEach(p => {
-            if (p.correct !== undefined) {
-                if (p.correct) correct++;
-                total++;
-            } else if (p.realized_up !== null && p.realized_up !== undefined) {
-                const isUp = (p.p_up != null ? p.p_up : (p.direction === 'UP' ? 0.8 : 0.2)) >= 0.5;
-                const wasUp = p.realized_up === 1;
-                if (isUp === wasUp) correct++;
-                total++;
-            }
-        });
-        const accuracy = total > 0 ? (correct / total * 100) : 52.0;
+    const correct = data.predictions.filter(p => p.correct === true).length;
+    const total = data.predictions.filter(p => p.correct !== undefined && p.correct !== null).length;
+    const accuracy = total > 0 ? (correct / total * 100) : 52.0;
 
-        const lastPred = data.predictions[data.predictions.length - 1];
-        const pUp = lastPred ? (lastPred.p_up != null ? lastPred.p_up : (lastPred.direction === 'UP' ? 0.8 : 0.2)) : 0.75;
-        const confidence = Math.round((pUp >= 0.5 ? pUp : 1 - pUp) * 100);
+    const lastPred = data.predictions[data.predictions.length - 1];
+    const confidence = lastPred ? lastPred.confidence : 75;
 
-        let value, label;
-        switch (activeMetric) {
-            case 'accuracy':
-                value = accuracy.toFixed(1) + '%';
-                label = 'Historical Accuracy';
-                break;
-            case 'confidence':
-                value = confidence + '%';
-                label = 'Latest Call Confidence';
-                break;
-            case 'takeovers':
-                value = data.takeovers;
-                label = 'Model Takeover Count';
-                break;
-        }
+    let value, label;
+    switch (activeMetric) {
+      case 'accuracy':
+        value = accuracy.toFixed(1) + '%';
+        label = 'Accuracy';
+        break;
+      case 'confidence':
+        value = confidence + '%';
+        label = 'Current Confidence';
+        break;
+      case 'takeovers':
+        value = data.takeovers;
+        label = 'Model Takeovers';
+        break;
+    }
 
-        html += `
-            <div class="comparison-item">
-                <div class="coin-label">${COIN_ICONS[coin]} ${COIN_NAMES[coin]}</div>
-                <div class="metric-value" style="color: ${COIN_COLORS[coin]}">${value}</div>
-                <div class="metric-label">${label}</div>
-            </div>
-        `;
-    });
+    html += `
+      <div class="comparison-item">
+        <div class="coin-label">${COIN_ICONS[coin]} ${COIN_NAMES[coin]}</div>
+        <div class="metric-value" style="color: ${COIN_COLORS[coin]}">${value}</div>
+        <div class="metric-label">${label}</div>
+      </div>
+    `;
+  });
 
-    grid.innerHTML = html;
+  grid.innerHTML = html;
 }
-
-// ============================================================
-// 7. TIMELINE SECTION
-// ============================================================
 
 function updateTimelines() {
-    COINS.forEach(coin => {
-        const data = allData[coin];
-        if (!data) return;
+  COINS.forEach(coin => {
+    const data = currentData[coin];
+    if (!data) return;
 
-        const container = document.getElementById(`${coin.toLowerCase()}Timeline`);
-        if (!container) return;
+    const container = document.getElementById(`${coin.toLowerCase()}Timeline`);
+    if (!container) return;
 
-        const timelineContainer = container.querySelector('.timeline-container');
-        if (!timelineContainer) return;
+    const timelineContainer = container.querySelector('.timeline-container');
+    if (!timelineContainer) return;
 
-        if (!data.takeoverEvents || data.takeoverEvents.length === 0) {
-            timelineContainer.innerHTML = `
-                <div class="no-takeovers">No model takeovers detected yet.</div>
-            `;
-            return;
-        }
+    if (!data.takeoverEvents || data.takeoverEvents.length === 0) {
+      timelineContainer.innerHTML = `
+        <div class="no-takeovers">No model takeovers detected yet.</div>
+      `;
+      return;
+    }
 
-        let html = '';
-        data.takeoverEvents.slice(-10).reverse().forEach(event => {
-            const date = new Date(event.date);
-            html += `
-                <div class="timeline-event">
-                    <span class="event-date">${date.toLocaleDateString()}</span>
-                    <span class="event-models">
-                        <span class="model-from">${event.from}</span>
-                        <span class="event-arrow">→</span>
-                        <span class="model-to">${event.to}</span>
-                    </span>
-                </div>
-            `;
-        });
-
-        timelineContainer.innerHTML = html;
+    let html = '';
+    data.takeoverEvents.slice(-10).reverse().forEach(event => {
+      const date = new Date(event.date);
+      html += `
+        <div class="timeline-event">
+          <span class="event-date">${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+          <span class="event-models">
+            <span class="model-from">${event.from}</span>
+            <span class="event-arrow">→</span>
+            <span class="model-to">${event.to}</span>
+          </span>
+        </div>
+      `;
     });
-}
 
-// ============================================================
-// 8. DISTRIBUTION SECTION
-// ============================================================
+    timelineContainer.innerHTML = html;
+  });
+}
 
 function updateDistributions() {
-    COINS.forEach(coin => {
-        const data = allData[coin];
-        if (!data) return;
+  COINS.forEach(coin => {
+    const data = currentData[coin];
+    if (!data) return;
 
-        const container = document.getElementById(`${coin.toLowerCase()}Distribution`);
-        if (!container) return;
+    const container = document.getElementById(`${coin.toLowerCase()}Distribution`);
+    if (!container) return;
 
-        const barsContainer = container.querySelector('.distribution-bars');
-        if (!barsContainer) return;
+    const barsContainer = container.querySelector('.distribution-bars');
+    if (!barsContainer) return;
 
-        const total = data.selections?.length || data.predictions?.length || 1;
-        let html = '';
+    const total = data.selections?.length || data.predictions?.length || 1;
+    let html = '';
 
-        Object.keys(data.distribution).forEach(model => {
-            const count = data.distribution[model];
-            const pct = Math.round(count / total * 100);
-            const color = MODEL_COLORS[model] || '#4A90E2';
+    Object.keys(data.distribution).forEach(model => {
+      const count = data.distribution[model];
+      const pct = Math.round(count / total * 100);
+      const color = MODEL_COLORS[model] || '#4A90E2';
 
-            html += `
-                <div class="distribution-row">
-                    <span class="model-label">${model}</span>
-                    <div class="bar-track">
-                        <div class="bar-fill" style="width: ${pct}%; background: ${color}"></div>
-                    </div>
-                    <span class="bar-value">${pct}%</span>
-                </div>
-            `;
-        });
-
-        barsContainer.innerHTML = html || '<div class="no-takeovers">No data available</div>';
+      html += `
+        <div class="distribution-row">
+          <span class="model-label">${model}</span>
+          <div class="bar-track">
+            <div class="bar-fill" style="width: ${pct}%; background: ${color}"></div>
+          </div>
+          <span class="bar-value">${pct}%</span>
+        </div>
+      `;
     });
+
+    barsContainer.innerHTML = html || '<div class="no-takeovers">No data available</div>';
+  });
 }
 
 // ============================================================
-// 9. NAVIGATION & EVENT HANDLERS
+// 9. CHART CONTROLS (TIMEFRAME, FULLSCREEN, LEGEND, DOWNLOAD)
+// ============================================================
+
+// Timeframe selector per chart card
+document.querySelectorAll('.chart-tf .tf-btn').forEach(btn => {
+  btn.addEventListener('click', async function() {
+    const chartCard = this.closest('.chart-card');
+    const coin = chartCard?.dataset.coin;
+    if (!coin) return;
+
+    chartCard.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+
+    const days = parseInt(this.dataset.days);
+    chartDays[coin] = days;
+
+    const newData = await fetchCoinData(coin, days);
+    currentData[coin] = newData;
+
+    renderSingleChart(coin);
+    renderSingleMiniChart(coin);
+    updateSummaryCards();
+    updateComparison();
+    updateTimelines();
+    updateDistributions();
+    updateChartLegends();
+  });
+});
+
+// Fullscreen Action
+document.querySelectorAll('[data-action="fullscreen"]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const chartCard = this.closest('.chart-card');
+    if (!chartCard) return;
+
+    chartCard.classList.toggle('fullscreen');
+    this.innerHTML = chartCard.classList.contains('fullscreen')
+      ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
+      : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
+
+    setTimeout(() => {
+      const coin = chartCard.dataset.coin;
+      if (coin && chartInstances[coin]) {
+        chartInstances[coin].resize();
+      }
+    }, 200);
+  });
+});
+
+// Legend Toggle Action
+document.querySelectorAll('[data-action="legend"]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const chartCard = this.closest('.chart-card');
+    const coin = chartCard?.dataset.coin;
+    if (!coin) return;
+
+    chartLegendsVisible[coin] = !chartLegendsVisible[coin];
+
+    const legendContainer = chartCard.querySelector('.chart-legend');
+    if (legendContainer) {
+      legendContainer.style.display = chartLegendsVisible[coin] ? 'flex' : 'none';
+    }
+
+    if (chartInstances[coin]) {
+      chartInstances[coin].options.plugins.legend.display = chartLegendsVisible[coin];
+      chartInstances[coin].update();
+    }
+  });
+});
+
+// Download Action
+document.querySelectorAll('[data-action="download"]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const chartCard = this.closest('.chart-card');
+    const coin = chartCard?.dataset.coin;
+    if (!coin || !chartInstances[coin]) return;
+
+    const canvas = chartInstances[coin].canvas;
+    const link = document.createElement('a');
+    link.download = `${coin}_CryptoPulse_V3_${new Date().toISOString().slice(0,10)}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+});
+
+// Comparison Metric Buttons
+document.querySelectorAll('.compare-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.compare-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    updateComparison();
+  });
+});
+
+// ============================================================
+// 10. NAVIGATION & TAB HANDLING
 // ============================================================
 
 function renderNav() {
-    document.querySelectorAll('.nav-tab').forEach(btn => {
-        const on = btn.dataset.view === activeView;
-        if (btn.classList.contains('nav-tab-mobile')) {
-            btn.className = 'nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-all shrink-0 ' + (on ? 'text-[#4A90E2] bg-[#4A90E2]/10 font-bold' : 'text-[#718096]');
-        } else {
-            btn.className = 'nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ' + (on ? 'bg-[#4A90E2] text-white shadow-sm font-bold' : 'text-[#4A4A5E] hover:text-[#1A1A2E] hover:bg-[#F8F9FA]');
-        }
-    });
-
-    document.getElementById('view-dashboard').classList.toggle('hidden', activeView !== 'dashboard');
-    document.getElementById('view-lab').classList.toggle('hidden', activeView !== 'lab');
-    document.getElementById('view-learning').classList.toggle('hidden', activeView !== 'learning');
-
-    window.history.replaceState(null, '', `#${activeView}`);
-
-    if (activeView === 'dashboard') {
-        loadAllData(currentDays);
-    } else if (activeView === 'lab') {
-        loadLab();
-    } else if (activeView === 'learning') {
-        loadLearningOverview();
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    const on = btn.dataset.view === activeView;
+    if (btn.classList.contains('nav-tab-mobile')) {
+      btn.className = 'nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-all shrink-0 ' + (on ? 'text-[#4A90E2] bg-[#4A90E2]/10 font-bold' : 'text-[#718096]');
+    } else {
+      btn.className = 'nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ' + (on ? 'bg-[#4A90E2] text-white shadow-xs font-bold' : 'text-[#4A4A5E] hover:text-[#1A1A2E] hover:bg-[#F8F9FA]');
     }
+  });
+
+  document.getElementById('view-dashboard').classList.toggle('hidden', activeView !== 'dashboard');
+  document.getElementById('view-lab').classList.toggle('hidden', activeView !== 'lab');
+  document.getElementById('view-learning').classList.toggle('hidden', activeView !== 'learning');
+
+  window.history.replaceState(null, '', `#${activeView}`);
+
+  if (activeView === 'dashboard') {
+    loadAllData();
+  } else if (activeView === 'lab') {
+    loadLab();
+  } else if (activeView === 'learning') {
+    loadLearningOverview();
+  }
 }
 
-// Timeframe selector
-document.querySelectorAll('.tf-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        currentDays = parseInt(this.dataset.days);
-        loadAllData(currentDays);
-    });
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.onclick = () => {
+    activeView = btn.dataset.view;
+    renderNav();
+  };
 });
 
-// Comparison metric switcher
-document.querySelectorAll('.compare-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.compare-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        updateComparison();
-    });
-});
-
-// Refresh Button
 document.getElementById('refreshBtn').onclick = async () => {
-    const icon = document.getElementById('refreshIcon');
-    if (icon) icon.classList.add('spinning');
-    try {
-        if (activeView === 'dashboard') {
-            await loadAllData(currentDays);
-        } else if (activeView === 'lab') {
-            await loadLab();
-        } else if (activeView === 'learning') {
-            await loadLearningOverview();
-        }
-    } finally {
-        if (icon) setTimeout(() => icon.classList.remove('spinning'), 600);
+  const icon = document.getElementById('refreshIcon');
+  if (icon) icon.classList.add('animate-spin');
+  try {
+    if (activeView === 'dashboard') {
+      await loadAllData();
+    } else if (activeView === 'lab') {
+      await loadLab();
+    } else if (activeView === 'learning') {
+      await loadLearningOverview();
     }
+  } finally {
+    if (icon) setTimeout(() => icon.classList.remove('animate-spin'), 600);
+  }
 };
 
-// Nav tab click listeners
-document.querySelectorAll('.nav-tab').forEach(btn => {
-    btn.onclick = () => {
-        activeView = btn.dataset.view;
-        renderNav();
-    };
-});
-
 // ============================================================
-// 10. LAB & LEARNING TAB COMPATIBILITY
+// 11. LAB & AI LEARNING TAB COMPATIBILITY
 // ============================================================
 
 async function loadLab() {
-    const body = document.getElementById('selectedModelBody');
-    if (body) {
-        body.innerHTML = `<div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
-            <p class="text-xs font-semibold text-[#1A1A2E] mb-1">Active Model Selection Across Assets (24H)</p>
-            <p class="text-xs text-[#718096]">BTC: <strong>${allData.BTC?.currentModel || 'Condition-Matched'}</strong> · LINK: <strong>${allData.LINK?.currentModel || 'Challenger Tilted'}</strong> · ETH: <strong>${allData.ETH?.currentModel || 'k-NN Calibrated'}</strong></p>
-        </div>`;
-    }
-    loadChallengerLive();
-    loadChallengerCalib();
+  const body = document.getElementById('selectedModelBody');
+  if (body) {
+    body.innerHTML = `<div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <p class="text-xs font-semibold text-[#1A1A2E] mb-1">Active Model Selection Across Assets (24H)</p>
+      <p class="text-xs text-[#718096]">BTC: <strong>${currentData.BTC?.currentModel || 'Condition-Matched'}</strong> · LINK: <strong>${currentData.LINK?.currentModel || 'Challenger Tilted'}</strong> · ETH: <strong>${currentData.ETH?.currentModel || 'k-NN Calibrated'}</strong></p>
+    </div>`;
+  }
+  loadChallengerLive();
+  loadChallengerCalib();
 }
 
 async function loadChallengerLive() {
-    const host = document.getElementById('challengerLiveBody');
-    if (!host) return;
-    host.innerHTML = `<div class="text-xs text-[#4A4A5E]">
-        <p class="font-semibold mb-1">Live Multi-Asset Challenger Status</p>
-        <p class="text-[#718096]">Active monitoring enabled for BTC, LINK, and ETH endpoints on 24H horizon.</p>
-    </div>`;
+  const host = document.getElementById('challengerLiveBody');
+  if (!host) return;
+  host.innerHTML = `<div class="text-xs text-[#4A4A5E]">
+    <p class="font-semibold mb-1">Live Multi-Asset Challenger Status</p>
+    <p class="text-[#718096]">Active monitoring enabled for BTC, LINK, and ETH endpoints on 24H horizon.</p>
+  </div>`;
 }
 
 async function loadChallengerCalib() {
-    const host = document.getElementById('challengerCalibBody');
-    if (!host) return;
-    host.innerHTML = `<table class="w-full text-xs text-[#4A4A5E]">
-        <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]"><th class="py-1">Asset</th><th class="py-1">Active Model</th><th class="py-1">Status</th></tr></thead>
-        <tbody>
-            <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">BTC</td><td>${allData.BTC?.currentModel || 'Condition-Matched'}</td><td class="text-[#2ECC71]">Active</td></tr>
-            <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">LINK</td><td>${allData.LINK?.currentModel || 'Challenger Tilted'}</td><td class="text-[#2ECC71]">Active</td></tr>
-            <tr><td class="py-1.5 font-bold">ETH</td><td>${allData.ETH?.currentModel || 'k-NN Calibrated'}</td><td class="text-[#2ECC71]">Active</td></tr>
-        </tbody>
-    </table>`;
+  const host = document.getElementById('challengerCalibBody');
+  if (!host) return;
+  host.innerHTML = `<table class="w-full text-xs text-[#4A4A5E]">
+    <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]"><th class="py-1">Asset</th><th class="py-1">Active Model</th><th class="py-1">Status</th></tr></thead>
+    <tbody>
+      <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">BTC</td><td>${currentData.BTC?.currentModel || 'Condition-Matched'}</td><td class="text-[#2ECC71]">Active</td></tr>
+      <tr class="border-b border-[#F0F0F0]"><td class="py-1.5 font-bold">LINK</td><td>${currentData.LINK?.currentModel || 'Challenger Tilted'}</td><td class="text-[#2ECC71]">Active</td></tr>
+      <tr><td class="py-1.5 font-bold">ETH</td><td>${currentData.ETH?.currentModel || 'k-NN Calibrated'}</td><td class="text-[#2ECC71]">Active</td></tr>
+    </tbody>
+  </table>`;
 }
 
 async function loadLearningOverview() {
-    const grid = document.getElementById('learnStatusGrid');
-    if (grid) {
-        grid.innerHTML = `
-            <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Prediction Ledger</p><p class="text-xs text-[#2ECC71] font-semibold">● Active (24H)</p></div>
-            <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Outcome Resolution</p><p class="text-xs text-[#2ECC71] font-semibold">● Active</p></div>
-            <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Learning Engine</p><p class="text-xs text-[#4A90E2] font-semibold">● Healthy</p></div>
-            <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Asset Coverage</p><p class="text-xs text-[#1A1A2E] font-semibold">BTC, LINK, ETH</p></div>
-        `;
-    }
-    loadComparisonCards();
+  const grid = document.getElementById('learnStatusGrid');
+  if (grid) {
+    grid.innerHTML = `
+      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Prediction Ledger</p><p class="text-xs text-[#2ECC71] font-semibold">● Active (24H)</p></div>
+      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Outcome Resolution</p><p class="text-xs text-[#2ECC71] font-semibold">● Active</p></div>
+      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Learning Engine</p><p class="text-xs text-[#4A90E2] font-semibold">● Healthy</p></div>
+      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Asset Coverage</p><p class="text-xs text-[#1A1A2E] font-semibold">BTC, LINK, ETH</p></div>
+    `;
+  }
+  loadComparisonCards();
 }
 
 async function loadComparisonCards() {
-    const btcCard = document.getElementById('btcComparisonCard');
-    const linkCard = document.getElementById('linkComparisonCard');
-    const ethCard = document.getElementById('ethComparisonCard');
+  const btcCard = document.getElementById('btcComparisonCard');
+  const linkCard = document.getElementById('linkComparisonCard');
+  const ethCard = document.getElementById('ethComparisonCard');
 
-    if (btcCard) {
-        btcCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">BTC Bitcoin</h3><p class="text-xs text-[#718096]">Active: ${allData.BTC?.currentModel || 'Condition-Matched'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${allData.BTC?.takeovers || 0}</p>`;
-    }
-    if (linkCard) {
-        linkCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">LINK Chainlink</h3><p class="text-xs text-[#718096]">Active: ${allData.LINK?.currentModel || 'Challenger Tilted'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${allData.LINK?.takeovers || 0}</p>`;
-    }
-    if (ethCard) {
-        ethCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">ETH Ethereum</h3><p class="text-xs text-[#718096]">Active: ${allData.ETH?.currentModel || 'k-NN Calibrated'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${allData.ETH?.takeovers || 0}</p>`;
-    }
+  if (btcCard) {
+    btcCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">BTC Bitcoin</h3><p class="text-xs text-[#718096]">Active: ${currentData.BTC?.currentModel || 'Condition-Matched'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.BTC?.takeovers || 0}</p>`;
+  }
+  if (linkCard) {
+    linkCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">LINK Chainlink</h3><p class="text-xs text-[#718096]">Active: ${currentData.LINK?.currentModel || 'Challenger Tilted'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.LINK?.takeovers || 0}</p>`;
+  }
+  if (ethCard) {
+    ethCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">ETH Ethereum</h3><p class="text-xs text-[#718096]">Active: ${currentData.ETH?.currentModel || 'k-NN Calibrated'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.ETH?.takeovers || 0}</p>`;
+  }
 }
 
 // ============================================================
-// 11. INITIALIZATION
+// 12. INITIALIZATION & RESIZE HANDLER
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    renderNav();
+  renderNav();
+});
+
+let resizeTimeout;
+window.addEventListener('resize', function() {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    COINS.forEach(coin => {
+      if (chartInstances[coin]) {
+        chartInstances[coin].resize();
+      }
+      if (miniChartInstances[coin]) {
+        miniChartInstances[coin].resize();
+      }
+    });
+  }, 200);
 });
 </script>
 </body>
