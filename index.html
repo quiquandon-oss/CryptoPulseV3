@@ -1466,6 +1466,7 @@ let currentData = { BTC: null, LINK: null, ETH: null };
 let chartInstances = { BTC: null, LINK: null, ETH: null };
 let miniChartInstances = { BTC: null, LINK: null, ETH: null };
 let labChartInstances = { exp002: null, exp003: null };
+const DASHBOARD_AUTO_REFRESH_MS = 60000;
 let chartDays = { BTC: 7, LINK: 7, ETH: 7 };
 let chartLegendsVisible = { BTC: true, LINK: true, ETH: true };
 let activeView = (location.hash || '').replace('#', '') || 'dashboard';
@@ -2789,6 +2790,12 @@ async function loadComparisonCards() {
 
 document.addEventListener('DOMContentLoaded', function() {
   renderNav();
+  // Dashboard prices/predictions tick on their own; the Lab tab's experiment
+  // data intentionally does NOT (loads on tab-open and the Refresh button
+  // only) — this timer only ever re-fetches while the Dashboard tab is open.
+  setInterval(() => {
+    if (activeView === 'dashboard') loadAllData();
+  }, DASHBOARD_AUTO_REFRESH_MS);
 });
 
 let resizeTimeout;
