@@ -210,9 +210,15 @@
     </div>
 
     <section id="chartSection" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 sm:p-6 mb-6 card-shadow card-shadow-hover">
-      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
-          <h2 id="chartTitle" class="text-base font-bold text-[#1A1A2E]">Prediction History</h2>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h2 id="chartTitle" class="text-base font-bold text-[#1A1A2E]">Prediction History</h2>
+            <div id="activeModelStatusBadge" class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F8F9FA] border border-[#E2E8F0] text-xs font-semibold text-[#1A1A2E]">
+              <span class="text-xs">Active Model:</span>
+              <span id="activeModelBadgeVal" class="font-bold text-[#4A90E2]">Original k-NN</span>
+            </div>
+          </div>
           <p id="chartCountNote" class="text-xs text-[#718096] font-mono-data mt-0.5"></p>
         </div>
         <div class="flex items-center gap-2">
@@ -223,19 +229,19 @@
           </button>
         </div>
       </div>
-      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="chartNote">Price line shows market history. Colored dots indicate historical prediction calls and their realized outcomes.</p>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="chartNote">Price line shows market history. Colored dots indicate historical prediction calls and their active AI model variant. Red triangles indicate model takeover points.</p>
 
       <div id="chartContainer" class="relative bg-white" style="height:280px;">
         <canvas id="priceChart"></canvas>
       </div>
 
-      <!-- 4-Color Dots Legend -->
-      <div class="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center justify-center flex-wrap gap-3 sm:gap-5 text-xs text-[#4A4A5E] font-medium">
-        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#2ECC71] inline-block border border-white shadow-sm"></span> Correct UP</span>
-        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#E74C3C] inline-block border border-white shadow-sm"></span> Wrong UP</span>
-        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#4A90E2] inline-block border border-white shadow-sm"></span> Correct DOWN</span>
-        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#E67E22] inline-block border border-white shadow-sm"></span> Wrong DOWN</span>
-        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#95A5A6] inline-block border border-white shadow-sm"></span> Pending</span>
+      <!-- Model & Outcome Legend -->
+      <div id="dashboardChartLegend" class="mt-4 pt-3 border-t border-[#E2E8F0] flex flex-col gap-2 text-xs text-[#4A4A5E]">
+        <div class="flex items-center justify-center flex-wrap gap-3 sm:gap-4 font-medium" id="dashboardModelLegendRow"></div>
+        <div class="flex items-center justify-center flex-wrap gap-3 sm:gap-5 text-[11px] text-[#718096]">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full border border-[#2ECC71] bg-white inline-block"></span> Circle = Call</span>
+          <span class="flex items-center gap-1.5"><span class="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[9px] border-b-[#E74C3C] inline-block"></span> Triangle = Model Takeover</span>
+        </div>
       </div>
     </section>
 
@@ -509,7 +515,54 @@
       <div id="learnSelectionBody"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
-    <!-- Section 5 — Recent Learning Events -->
+    <!-- Section 5 — Model Takeover Timeline & Distribution Breakdown -->
+    <section id="learnTakeoverCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <h2 class="text-base font-bold text-[#1A1A2E]">Model Takeovers & Distribution — <span id="learnTakeoverCoinLabel" class="text-[#718096] font-normal text-xs"></span></h2>
+          <p class="text-xs text-[#718096]">Timeline of model switch points and historical model usage breakdown.</p>
+        </div>
+        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnTakeoverNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="learnTakeoverNote">Shows model takeover events where the active prediction model switched between variants, along with model usage distribution.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+        <!-- Model Distribution Breakdown -->
+        <div class="bg-[#F8F9FA] border border-[#E2E8F0] rounded-xl p-4">
+          <p class="text-xs uppercase tracking-wider text-[#718096] font-bold mb-3">Model Usage Distribution</p>
+          <div id="learnModelDistributionBody"><p class="text-xs text-[#718096]">Loading…</p></div>
+        </div>
+
+        <!-- Takeover Timeline -->
+        <div class="bg-[#F8F9FA] border border-[#E2E8F0] rounded-xl p-4">
+          <p class="text-xs uppercase tracking-wider text-[#718096] font-bold mb-3">Takeover Events</p>
+          <div id="learnTakeoverTimelineBody" style="max-height:260px;overflow-y:auto"><p class="text-xs text-[#718096]">Loading…</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Side-by-Side BTC vs LINK Comparison Section -->
+    <section id="learnComparisonCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <h2 class="text-base font-bold text-[#1A1A2E]">BTC vs. LINK Prediction Model Comparison</h2>
+          <p class="text-xs text-[#718096]">Side-by-side comparison of AI Learning model behavior and takeover metrics.</p>
+        </div>
+        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnComparisonNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="learnComparisonNote">Compares active models, predictions count, and takeover frequencies between Bitcoin and Chainlink models.</p>
+
+      <div id="learnComparisonGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+        <div class="bg-[#F8F9FA] border border-[#E2E8F0] rounded-xl p-4" id="btcComparisonCard">
+          <p class="text-xs text-[#718096]">Loading BTC comparison...</p>
+        </div>
+        <div class="bg-[#F8F9FA] border border-[#E2E8F0] rounded-xl p-4" id="linkComparisonCard">
+          <p class="text-xs text-[#718096]">Loading LINK comparison...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5.5 — Recent Learning Events -->
     <section id="learnEventsCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 card-shadow card-shadow-hover">
       <h2 class="text-sm font-bold text-[#1A1A2E] mb-1">Recent Learning Events — <span id="learnEventsCoinLabel" class="text-[#718096] font-normal text-xs"></span></h2>
       <p class="text-xs text-[#718096] mb-3">Real selection decisions from GET /selection-history.</p>
@@ -939,7 +992,39 @@ const RANGES = [
   { key: '1M', label: '1M', ms: 30*24*60*60*1000 },
   { key: 'ALL', label: 'ALL', ms: Infinity },
 ];
-let chartRaw = { prices: [], predictions: [] };
+const MODEL_COLORS = {
+  'Original k-NN': '#4A90E2',
+  'Experimental (adaptive-K)': '#9B59B6',
+  'k-NN Calibrated': '#1ABC9C',
+  'Challenger Flat': '#F39C12',
+  'Challenger Tilted': '#E67E22',
+  'Challenger Calibrated': '#D35400',
+  'Condition-Matched Selection': '#2ECC71',
+  'original': '#4A90E2',
+  'experimental': '#9B59B6',
+  'calibrated': '#1ABC9C',
+  'challenger_flat': '#F39C12',
+  'challenger_tilted': '#E67E22',
+  'challenger_calibrated': '#D35400',
+};
+
+const MODEL_ICONS = {
+  'Original k-NN': '🔵',
+  'Experimental (adaptive-K)': '🟣',
+  'k-NN Calibrated': '🟢',
+  'Challenger Flat': '🟠',
+  'Challenger Tilted': '🟡',
+  'Challenger Calibrated': '🔶',
+  'Condition-Matched Selection': '✅',
+  'original': '🔵',
+  'experimental': '🟣',
+  'calibrated': '🟢',
+  'challenger_flat': '🟠',
+  'challenger_tilted': '🟡',
+  'challenger_calibrated': '🔶',
+};
+
+let chartRaw = { prices: [], predictions: [], selections: [], switches: [], currentModelVariant: 'original' };
 let chartInstance = null;
 let activeRange = '1M';
 
@@ -1039,30 +1124,64 @@ function renderChart(){
   const cutoff = range.ms === Infinity ? -Infinity : Date.now() - range.ms;
   const prices = chartRaw.prices.filter(p => p.ts >= cutoff);
   const preds = chartRaw.predictions.filter(p => p.ts >= cutoff);
+  const switches = chartRaw.switches.filter(s => s.ts >= cutoff);
+
+  // Update current active model badge in chart header
+  const curVar = chartRaw.currentModelVariant || 'original';
+  const curLabel = SELECTION_VARIANT_LABELS[curVar] || curVar;
+  const curIcon = MODEL_ICONS[curVar] || '🔵';
+  const curColor = MODEL_COLORS[curVar] || '#4A90E2';
+  const badgeValEl = document.getElementById('activeModelBadgeVal');
+  if (badgeValEl) {
+    badgeValEl.textContent = `${curIcon} ${curLabel}`;
+    badgeValEl.style.color = curColor;
+  }
+
+  // Build model legend row for models present in current predictions
+  const legendRow = document.getElementById('dashboardModelLegendRow');
+  if (legendRow) {
+    const presentModels = {};
+    preds.forEach(p => {
+      const v = p.selectedModel || 'original';
+      presentModels[v] = (presentModels[v] || 0) + 1;
+    });
+    if (Object.keys(presentModels).length === 0) presentModels['original'] = 0;
+
+    legendRow.innerHTML = Object.keys(presentModels).map(v => {
+      const label = SELECTION_VARIANT_LABELS[v] || v;
+      const color = MODEL_COLORS[v] || '#4A90E2';
+      const count = presentModels[v];
+      return `<span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block border border-white shadow-sm" style="background:${color}"></span> ${label} (${count})</span>`;
+    }).join('');
+  }
 
   const priceData = prices.map(p => ({ x: p.ts, y: p[cfg.priceHistField] }));
   const predData = preds.map(p => ({ x: p.ts, y: p[cfg.predPriceField] }));
 
-  // 4-Color Mapping:
-  // Correct UP: #2ECC71 (Green)
-  // Wrong UP: #E74C3C (Red)
-  // Correct DOWN: #4A90E2 (Blue)
-  // Wrong DOWN: #E67E22 (Orange)
-  // Pending: #95A5A6 (Gray)
-  const bg = preds.map(p => {
-    const isUp = p.p_up >= 0.5;
+  // Color dots by model variant; border color indicates correct (green) or wrong (red) or pending (white)
+  const bg = preds.map(p => MODEL_COLORS[p.selectedModel] || '#4A90E2');
+  const border = preds.map(p => {
     const resolved = p.realized_up !== null && p.realized_up !== undefined;
-    if (!resolved) return '#95A5A6';
-    const isCorrect = p.realized_up === 1;
-    if (isUp) return isCorrect ? '#2ECC71' : '#E74C3C';
-    else return isCorrect ? '#4A90E2' : '#E67E22';
+    if (!resolved) return '#FFFFFF';
+    return p.realized_up === 1 ? '#2ECC71' : '#E74C3C';
   });
 
-  const border = preds.map(() => '#FFFFFF');
+  // Map takeover switches to chart points
+  const switchData = switches.map(s => {
+    let priceMatch = prices.find(p => Math.abs(p.ts - s.ts) <= 12 * 3600 * 1000);
+    if (!priceMatch && prices.length > 0) {
+      priceMatch = prices.reduce((prev, curr) => Math.abs(curr.ts - s.ts) < Math.abs(prev.ts - s.ts) ? curr : prev, prices[0]);
+    }
+    return {
+      x: s.ts,
+      y: priceMatch ? priceMatch[cfg.priceHistField] : 0,
+      _switch: s,
+    };
+  });
 
   const nResolved = preds.filter(p => p.realized_up !== null && p.realized_up !== undefined).length;
   document.getElementById('chartCountNote').textContent =
-    `${preds.length} prediction${preds.length===1?'':'s'} in this range · ${nResolved} resolved`;
+    `${preds.length} prediction${preds.length===1?'':'s'} in this range · ${nResolved} resolved · ${switches.length} model takeover${switches.length===1?'':'s'}`;
 
   const ctx = document.getElementById('priceChart').getContext('2d');
   const gradient = ctx.createLinearGradient(0, 0, 0, 280);
@@ -1089,11 +1208,25 @@ function renderChart(){
       pointStyle: 'circle',
       pointBackgroundColor: bg,
       pointBorderColor: border,
-      pointBorderWidth: 2,
+      pointBorderWidth: 2.5,
       pointRadius: 7,
       pointHoverRadius: 10,
       pointHitRadius: 14,
       _preds: preds,
+    },
+    {
+      type: 'scatter',
+      label: 'Model Takeover',
+      data: switchData,
+      showLine: false,
+      pointStyle: 'triangle',
+      pointBackgroundColor: '#E74C3C',
+      pointBorderColor: '#FFFFFF',
+      pointBorderWidth: 2,
+      pointRadius: 11,
+      pointHoverRadius: 14,
+      pointHitRadius: 16,
+      _switches: switches,
     },
   ];
 
@@ -1127,14 +1260,26 @@ function renderChart(){
           boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
           callbacks: {
             label: (item) => {
+              if (item.dataset.label === 'Model Takeover') {
+                const sw = item.dataset._switches[item.dataIndex];
+                if (!sw) return 'Model Takeover';
+                return [
+                  `⚡ MODEL TAKEOVER POINT`,
+                  `From: ${sw.fromLabel}`,
+                  `To: ${sw.toLabel}`,
+                  `Date: ${new Date(sw.ts).toLocaleDateString()}`,
+                  `Reason: ${sw.reason || 'N/A'}`
+                ];
+              }
               if(item.dataset.label !== 'Predictions') return cfg.label + ' $' + item.parsed.y.toLocaleString();
               const p = item.dataset._preds[item.dataIndex];
               const isUp = p.p_up >= 0.5;
               const confPct = Math.round((isUp ? p.p_up : 1 - p.p_up) * 100);
               const dirText = isUp ? 'UP ▲' : 'DOWN ▼';
               const lines = [
+                `Active Model: ${p.modelLabel || 'Original k-NN'}`,
                 `Predicted: ${dirText} (${confPct}% confidence)`,
-                `Price @ Call: $${p[cfg.predPriceField].toLocaleString()}`,
+                `Price @ Call: $${(p[cfg.predPriceField] || 0).toLocaleString()}`,
                 `Median expected move: ${p.median_analog_return>0?'+':''}${p.median_analog_return?.toFixed(2)}%`,
               ];
               const resolved = p.realized_up !== null && p.realized_up !== undefined;
@@ -1201,12 +1346,72 @@ function renderRecapTable(){
 async function loadChart(){
   const cfg = COIN_CONFIG[currentCoin];
   try{
-    const r = await fetch(WORKER_URL + cfg.chart + '?horizon=' + currentHorizon);
-    const d = await r.json();
-    if(d.ok){
-      chartRaw.prices = d.prices;
-      chartRaw.predictions = d.predictions;
+    const [chartRes, selRes] = await Promise.all([
+      fetch(WORKER_URL + cfg.chart + '?horizon=' + currentHorizon).then(r => r.json()).catch(() => null),
+      fetch(WORKER_URL + '/selection-history?coin=' + currentCoin + '&horizon=' + currentHorizon + '&limit=100').then(r => r.json()).catch(() => null),
+    ]);
+
+    let predictions = [];
+    let prices = [];
+    if(chartRes && chartRes.ok){
+      prices = chartRes.prices || [];
+      predictions = chartRes.predictions || [];
     }
+
+    let decisions = (selRes && selRes.ok && selRes.decisions) ? selRes.decisions : [];
+
+    // Map each prediction to the applicable selected model variant
+    const mappedPredictions = predictions.map(pred => {
+      const pTs = pred.ts || (pred.timestamp ? new Date(pred.timestamp).getTime() : 0);
+      let matchedDec = null;
+      if (decisions.length > 0) {
+        matchedDec = decisions.find(d => {
+          const dTs = d.ts;
+          return Math.abs(dTs - pTs) <= 12 * 3600 * 1000;
+        });
+        if (!matchedDec) {
+          matchedDec = decisions.reduce((prev, curr) => {
+            return Math.abs(curr.ts - pTs) < Math.abs(prev.ts - pTs) ? curr : prev;
+          }, decisions[0]);
+        }
+      }
+      const modelVariant = matchedDec ? matchedDec.chosen_variant : 'original';
+      return {
+        ...pred,
+        ts: pTs,
+        selectedModel: modelVariant,
+        modelLabel: SELECTION_VARIANT_LABELS[modelVariant] || modelVariant,
+      };
+    });
+
+    // Detect model switches
+    const sortedDecisions = [...decisions].sort((a, b) => a.ts - b.ts);
+    const switches = [];
+    let prevModel = null;
+    sortedDecisions.forEach((dec) => {
+      const variant = dec.chosen_variant;
+      if (prevModel !== null && variant !== prevModel) {
+        switches.push({
+          ts: dec.ts,
+          from: prevModel,
+          to: variant,
+          fromLabel: SELECTION_VARIANT_LABELS[prevModel] || prevModel,
+          toLabel: SELECTION_VARIANT_LABELS[variant] || variant,
+          reason: dec.reason,
+        });
+      }
+      prevModel = variant;
+    });
+
+    const currentModelVariant = sortedDecisions.length > 0 ? sortedDecisions[sortedDecisions.length - 1].chosen_variant : 'original';
+
+    chartRaw = {
+      prices,
+      predictions: mappedPredictions,
+      selections: sortedDecisions,
+      switches,
+      currentModelVariant,
+    };
   }catch(e){
     document.getElementById('chartCountNote').textContent = 'Could not load chart data.';
   }
@@ -2280,16 +2485,19 @@ async function loadLearningOverview(){
 async function loadLearningSelection(){
   const key = currentCoin + ':' + currentHorizon;
   document.getElementById('learnSelectionCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
+  document.getElementById('learnTakeoverCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
   document.getElementById('learnEventsCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
   document.getElementById('learnVariantsCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
   document.getElementById('learnSelectionBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  document.getElementById('learnModelDistributionBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  document.getElementById('learnTakeoverTimelineBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
   document.getElementById('learnEventsBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
   document.getElementById('learnVariantsBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
   document.getElementById('learnAuditBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
 
   const [selection, history] = await Promise.all([
     learningApi.getSelection(currentCoin, currentHorizon),
-    learningApi.getSelectionHistory(currentCoin, currentHorizon, 20),
+    learningApi.getSelectionHistory(currentCoin, currentHorizon, 100),
   ]);
   _learningSelectionCache[key] = { selection, history };
   const cachedDaily = _learningGlobalCache ? _learningGlobalCache.daily : null;
@@ -2297,9 +2505,182 @@ async function loadLearningSelection(){
   renderLearningStatus(cachedDaily, cachedChatgpt);
   renderLearningLoop(cachedDaily, cachedChatgpt);
   renderCurrentSelection(selection, history);
+  renderTakeoverAndDistribution(history);
   renderLearningEvents(history);
   renderVariantComparison(selection);
   renderLearningAudit(history);
+  loadComparisonCards();
+}
+
+function renderTakeoverAndDistribution(history){
+  const distEl = document.getElementById('learnModelDistributionBody');
+  const timelineEl = document.getElementById('learnTakeoverTimelineBody');
+  if (!history || !history.ok || !history.data || !history.data.decisions){
+    distEl.innerHTML = '<p class="text-xs text-[#718096]">Data unavailable.</p>';
+    timelineEl.innerHTML = '<p class="text-xs text-[#718096]">Data unavailable.</p>';
+    return;
+  }
+
+  const decisions = history.data.decisions || [];
+  if (decisions.length === 0){
+    distEl.innerHTML = '<p class="text-xs text-[#718096]">No selection history logged yet.</p>';
+    timelineEl.innerHTML = '<p class="text-xs text-[#718096]">No takeover events recorded.</p>';
+    return;
+  }
+
+  // Model distribution calculation
+  const counts = {};
+  decisions.forEach(d => {
+    const v = d.chosen_variant || 'original';
+    counts[v] = (counts[v] || 0) + 1;
+  });
+
+  const total = decisions.length;
+  distEl.innerHTML = Object.keys(counts).map(v => {
+    const label = SELECTION_VARIANT_LABELS[v] || v;
+    const color = MODEL_COLORS[v] || '#4A90E2';
+    const cnt = counts[v];
+    const pct = Math.round((cnt / total) * 100);
+    return `
+      <div class="mb-2">
+        <div class="flex justify-between items-center text-xs mb-1">
+          <span class="font-medium text-[#1A1A2E]">${label}</span>
+          <span class="font-mono-data text-[#718096]">${cnt} calls (${pct}%)</span>
+        </div>
+        <div class="w-full h-2 bg-[#E2E8F0] rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300" style="width:${pct}%; background:${color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Detect model switches (takeovers)
+  const sorted = [...decisions].sort((a,b) => a.ts - b.ts);
+  const switches = [];
+  let prevModel = null;
+  sorted.forEach(d => {
+    const v = d.chosen_variant;
+    if (prevModel !== null && v !== prevModel) {
+      switches.push({
+        ts: d.ts,
+        from: prevModel,
+        to: v,
+        fromLabel: SELECTION_VARIANT_LABELS[prevModel] || prevModel,
+        toLabel: SELECTION_VARIANT_LABELS[v] || v,
+        reason: d.reason,
+      });
+    }
+    prevModel = v;
+  });
+
+  if (switches.length === 0) {
+    timelineEl.innerHTML = '<p class="text-xs text-[#718096]">No model takeovers detected in recent history.</p>';
+    return;
+  }
+
+  timelineEl.innerHTML = switches.reverse().map((sw, idx) => {
+    const fromColor = MODEL_COLORS[sw.from] || '#4A90E2';
+    const toColor = MODEL_COLORS[sw.to] || '#4A90E2';
+    return `
+      <div class="flex items-start gap-2.5 mb-3 p-2.5 rounded-xl bg-white border border-[#E2E8F0] text-xs">
+        <span class="text-base leading-none text-[#E74C3C]">⟳</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between text-[11px] text-[#718096] mb-1 font-mono-data">
+            <span>${new Date(sw.ts).toLocaleDateString()} ${new Date(sw.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            <span class="font-bold text-[#E74C3C]">Switch #${switches.length - idx}</span>
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap font-semibold mb-1">
+            <span style="color:${fromColor}">${sw.fromLabel}</span>
+            <span class="text-[#718096]">→</span>
+            <span style="color:${toColor}">${sw.toLabel}</span>
+          </div>
+          <p class="text-[11px] text-[#4A4A5E] leading-tight line-clamp-2">${sw.reason || ''}</p>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadComparisonCards(){
+  const btcCard = document.getElementById('btcComparisonCard');
+  const linkCard = document.getElementById('linkComparisonCard');
+  if(!btcCard || !linkCard) return;
+
+  try {
+    const [btcSel, linkSel] = await Promise.all([
+      learningApi.getSelectionHistory('BTC', currentHorizon, 100),
+      learningApi.getSelectionHistory('LINK', currentHorizon, 100),
+    ]);
+
+    const renderCard = (coin, res) => {
+      if (!res || !res.ok || !res.data || !res.data.decisions || res.data.decisions.length === 0) {
+        return `
+          <h3 class="text-sm font-bold text-[#1A1A2E] mb-2">${coin} Model Summary</h3>
+          <p class="text-xs text-[#718096]">No selection history available for ${coin}.</p>`;
+      }
+      const decs = res.data.decisions;
+      const sorted = [...decs].sort((a,b) => a.ts - b.ts);
+      const currentModel = sorted[sorted.length - 1].chosen_variant;
+      const curLabel = SELECTION_VARIANT_LABELS[currentModel] || currentModel;
+      const curColor = MODEL_COLORS[currentModel] || '#4A90E2';
+
+      let switchesCount = 0;
+      let prevModel = null;
+      sorted.forEach(d => {
+        if (prevModel !== null && d.chosen_variant !== prevModel) switchesCount++;
+        prevModel = d.chosen_variant;
+      });
+
+      const modelCounts = {};
+      decs.forEach(d => {
+        const v = d.chosen_variant || 'original';
+        modelCounts[v] = (modelCounts[v] || 0) + 1;
+      });
+
+      return `
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-base font-bold text-[#1A1A2E]">${coin} Model Summary</h3>
+          <span class="px-2.5 py-1 rounded-full text-xs font-bold text-white shadow-sm" style="background:${curColor}">
+            ${curLabel}
+          </span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center mb-3">
+          <div class="bg-white border border-[#E2E8F0] rounded-lg p-2">
+            <span class="block text-[10px] text-[#718096] font-semibold uppercase">Total Decs</span>
+            <span class="text-sm font-bold font-mono-data text-[#1A1A2E]">${decs.length}</span>
+          </div>
+          <div class="bg-white border border-[#E2E8F0] rounded-lg p-2">
+            <span class="block text-[10px] text-[#718096] font-semibold uppercase">Takeovers</span>
+            <span class="text-sm font-bold font-mono-data text-[#E74C3C]">${switchesCount}</span>
+          </div>
+          <div class="bg-white border border-[#E2E8F0] rounded-lg p-2">
+            <span class="block text-[10px] text-[#718096] font-semibold uppercase">Horizon</span>
+            <span class="text-sm font-bold font-mono-data text-[#4A90E2]">${currentHorizon}H</span>
+          </div>
+        </div>
+        <p class="text-[11px] uppercase tracking-wide text-[#718096] font-bold mb-1.5">Model Usage Breakdown</p>
+        <div class="space-y-1.5">
+          ${Object.keys(modelCounts).map(v => {
+            const label = SELECTION_VARIANT_LABELS[v] || v;
+            const color = MODEL_COLORS[v] || '#4A90E2';
+            const cnt = modelCounts[v];
+            const pct = Math.round((cnt / decs.length) * 100);
+            return `
+              <div class="flex items-center gap-2 text-xs">
+                <span class="min-w-[100px] font-medium text-[#1A1A2E] truncate">${label}</span>
+                <div class="flex-1 h-2 bg-[#E2E8F0] rounded-full overflow-hidden">
+                  <div class="h-full rounded-full" style="width:${pct}%; background:${color}"></div>
+                </div>
+                <span class="font-mono-data text-[11px] text-[#718096] min-w-[30px] text-right">${cnt}</span>
+              </div>`;
+          }).join('')}
+        </div>`;
+    };
+
+    btcCard.innerHTML = renderCard('BTC', btcSel);
+    linkCard.innerHTML = renderCard('LINK', linkSel);
+  } catch(e) {
+    btcCard.innerHTML = '<p class="text-xs text-[#718096]">Could not load BTC comparison.</p>';
+    linkCard.innerHTML = '<p class="text-xs text-[#718096]">Could not load LINK comparison.</p>';
+  }
 }
 
 // ---- Section 1: Status grid ----
