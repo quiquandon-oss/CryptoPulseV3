@@ -188,10 +188,6 @@
     flex-wrap: wrap;
   }
 
-  .coin-icon {
-    font-size: 1.2rem;
-  }
-
   .coin-name {
     font-weight: 700;
     font-size: 0.95rem;
@@ -268,29 +264,57 @@
     font-size: 0.7rem;
   }
 
-  .prediction-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 16px;
-    font-size: 0.7rem;
-    color: var(--color-text-muted);
-    margin-top: 2px;
+  .status-badge.improving { color: #2ECC71; background: #EAFAF1; }
+  .status-badge.declining { color: #E74C3C; background: #FDEDEC; }
+  .status-badge.stable    { color: #95A5A6; background: #F0F0F0; }
+
+  .coin-logo { width: 24px; height: 24px; object-fit: contain; }
+  .coin-icon-fallback { font-size: 1.2rem; }
+
+  /* PERFORMANCE METRICS GRID (scoped so it can't collide with the
+     .comparison-item .metric-value rule used by the comparison section) */
+  .performance-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
   }
 
-  .meta-item {
+  .performance-metrics .metric-item {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    font-size: 0.7rem;
   }
 
-  .meta-icon {
-    font-size: 0.65rem;
+  .performance-metrics .metric-label {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    font-size: 0.6rem;
+    text-transform: uppercase;
   }
 
-  .meta-item strong {
+  .performance-metrics .metric-value {
+    font-weight: 700;
+    font-size: 0.85rem;
     color: var(--color-text);
-    font-family: 'JetBrains Mono', monospace;
   }
+
+  .performance-metrics .metric-value.positive { color: var(--color-bullish); }
+  .performance-metrics .metric-value.negative { color: var(--color-bearish); }
+
+  .performance-metrics .metric-trend {
+    font-size: 0.55rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .performance-metrics .metric-trend.positive { color: #2ECC71; background: #EAFAF1; }
+  .performance-metrics .metric-trend.negative { color: #E74C3C; background: #FDEDEC; }
+  .performance-metrics .metric-trend.neutral  { color: #95A5A6; background: #F0F0F0; }
 
   .mini-chart {
     height: 35px;
@@ -942,7 +966,10 @@
             <div class="summary-card" data-coin="BTC">
                 <div class="coin-header">
                     <div class="coin-info">
-                        <span class="coin-icon">₿</span>
+                        <span class="coin-icon-fallback">₿</span>
+                        <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.svg" alt="" class="coin-logo hidden" width="24" height="24"
+                             onload="this.classList.remove('hidden'); this.previousElementSibling.classList.add('hidden');"
+                             onerror="this.remove();">
                         <span class="coin-name">Bitcoin</span>
                         <span class="coin-symbol">BTC</span>
                     </div>
@@ -950,27 +977,35 @@
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="btcCall">
-                        <span class="direction up">▲ BULLISH</span>
+                        <span class="direction up">▲ --</span>
                         <span class="confidence">--%</span>
                     </div>
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="btcModel">Loading...</span>
                         <span class="model-tag">🧠</span>
+                        <span class="status-badge stable" id="btcStatus">➡ --</span>
                     </div>
-                    <div class="prediction-meta">
-                        <span class="meta-item">
-                            <span class="meta-icon">📈</span>
-                            Expected: <strong id="btcExpected">0.00%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🎯</span>
-                            Accuracy: <strong id="btcAccuracy">0.0%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🔄</span>
-                            Takeovers: <strong id="btcTakeoversCount">0</strong>
-                        </span>
+                    <div class="performance-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">Accuracy</span>
+                            <span class="metric-value" id="btcAccuracy">--</span>
+                            <span class="metric-trend neutral" id="btcAccuracyTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value" id="btcConfidence">--</span>
+                            <span class="metric-trend neutral" id="btcConfidenceTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Takeovers</span>
+                            <span class="metric-value" id="btcTakeoversCount">0</span>
+                            <span class="metric-trend neutral" id="btcTakeoversTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Expected</span>
+                            <span class="metric-value" id="btcExpected">0.00%</span>
+                        </div>
                     </div>
                     <div class="mini-chart" id="btcMiniChart">
                         <canvas id="btcMiniCanvas"></canvas>
@@ -982,7 +1017,10 @@
             <div class="summary-card" data-coin="LINK">
                 <div class="coin-header">
                     <div class="coin-info">
-                        <span class="coin-icon">🔗</span>
+                        <span class="coin-icon-fallback">🔗</span>
+                        <img src="https://cryptologos.cc/logos/chainlink-link-logo.svg" alt="" class="coin-logo hidden" width="24" height="24"
+                             onload="this.classList.remove('hidden'); this.previousElementSibling.classList.add('hidden');"
+                             onerror="this.remove();">
                         <span class="coin-name">Chainlink</span>
                         <span class="coin-symbol">LINK</span>
                     </div>
@@ -990,27 +1028,35 @@
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="linkCall">
-                        <span class="direction down">▼ BEARISH</span>
+                        <span class="direction up">▲ --</span>
                         <span class="confidence">--%</span>
                     </div>
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="linkModel">Loading...</span>
                         <span class="model-tag">🧠</span>
+                        <span class="status-badge stable" id="linkStatus">➡ --</span>
                     </div>
-                    <div class="prediction-meta">
-                        <span class="meta-item">
-                            <span class="meta-icon">📈</span>
-                            Expected: <strong id="linkExpected">0.00%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🎯</span>
-                            Accuracy: <strong id="linkAccuracy">0.0%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🔄</span>
-                            Takeovers: <strong id="linkTakeoversCount">0</strong>
-                        </span>
+                    <div class="performance-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">Accuracy</span>
+                            <span class="metric-value" id="linkAccuracy">--</span>
+                            <span class="metric-trend neutral" id="linkAccuracyTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value" id="linkConfidence">--</span>
+                            <span class="metric-trend neutral" id="linkConfidenceTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Takeovers</span>
+                            <span class="metric-value" id="linkTakeoversCount">0</span>
+                            <span class="metric-trend neutral" id="linkTakeoversTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Expected</span>
+                            <span class="metric-value" id="linkExpected">0.00%</span>
+                        </div>
                     </div>
                     <div class="mini-chart" id="linkMiniChart">
                         <canvas id="linkMiniCanvas"></canvas>
@@ -1022,7 +1068,10 @@
             <div class="summary-card" data-coin="ETH">
                 <div class="coin-header">
                     <div class="coin-info">
-                        <span class="coin-icon">⟠</span>
+                        <span class="coin-icon-fallback">⟠</span>
+                        <img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg" alt="" class="coin-logo hidden" width="24" height="24"
+                             onload="this.classList.remove('hidden'); this.previousElementSibling.classList.add('hidden');"
+                             onerror="this.remove();">
                         <span class="coin-name">Ethereum</span>
                         <span class="coin-symbol">ETH</span>
                     </div>
@@ -1030,27 +1079,35 @@
                 </div>
                 <div class="prediction-summary">
                     <div class="prediction-call" id="ethCall">
-                        <span class="direction up">▲ BULLISH</span>
+                        <span class="direction up">▲ --</span>
                         <span class="confidence">--%</span>
                     </div>
                     <div class="model-info">
                         <span class="model-label">Active Model:</span>
                         <span class="model-name" id="ethModel">Loading...</span>
                         <span class="model-tag">🧠</span>
+                        <span class="status-badge stable" id="ethStatus">➡ --</span>
                     </div>
-                    <div class="prediction-meta">
-                        <span class="meta-item">
-                            <span class="meta-icon">📈</span>
-                            Expected: <strong id="ethExpected">0.00%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🎯</span>
-                            Accuracy: <strong id="ethAccuracy">0.0%</strong>
-                        </span>
-                        <span class="meta-item">
-                            <span class="meta-icon">🔄</span>
-                            Takeovers: <strong id="ethTakeoversCount">0</strong>
-                        </span>
+                    <div class="performance-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">Accuracy</span>
+                            <span class="metric-value" id="ethAccuracy">--</span>
+                            <span class="metric-trend neutral" id="ethAccuracyTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value" id="ethConfidence">--</span>
+                            <span class="metric-trend neutral" id="ethConfidenceTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Takeovers</span>
+                            <span class="metric-value" id="ethTakeoversCount">0</span>
+                            <span class="metric-trend neutral" id="ethTakeoversTrend">→ --</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Expected</span>
+                            <span class="metric-value" id="ethExpected">0.00%</span>
+                        </div>
                     </div>
                     <div class="mini-chart" id="ethMiniChart">
                         <canvas id="ethMiniCanvas"></canvas>
@@ -1468,6 +1525,11 @@ function normalizePrediction(prediction) {
   const expMove = prediction.median_analog_return !== undefined ? prediction.median_analog_return : prediction.expectedMove;
   normalized.expectedMove = expMove != null ? parseFloat(expMove).toFixed(2) : "0.00";
 
+  // realized/actual move, once resolved. Stays null (not "0.00") while pending
+  // so callers can tell "resolved at 0%" apart from "not resolved yet".
+  const actual = prediction.real_return_pct ?? prediction.actual_return ?? prediction.realized_return ?? prediction.actualMove;
+  normalized.actualMove = actual != null ? parseFloat(actual).toFixed(2) : null;
+
   // actual move & correct
   if (prediction.correct !== undefined) {
     normalized.correct = Boolean(prediction.correct);
@@ -1723,6 +1785,56 @@ function updateTimestamp() {
 // 5. UPDATE SUMMARY CARDS & MINI CHARTS
 // ============================================================
 
+function calculatePerformanceMetrics(data) {
+  const empty = {
+    accuracy: 0, accuracyDiff: null, accuracyTrend: 'neutral',
+    confidence: 0, confidenceDiff: null, confidenceTrend: 'neutral',
+    takeovers: data?.takeovers || 0,
+    expectedMove: 0, expectedTrend: 'neutral'
+  };
+  if (!data || !data.predictions || data.predictions.length === 0) return empty;
+
+  const predictions = data.predictions;
+  const resolved = predictions.filter(p => p.correct === true || p.correct === false);
+  const accuracy = resolved.length > 0
+    ? (resolved.filter(p => p.correct).length / resolved.length * 100)
+    : 0;
+
+  // Trend needs a real "before" window to compare against — with fewer than
+  // 20 resolved predictions there isn't one, so stay neutral/null rather than
+  // dividing by zero and silently reporting a fake "no change".
+  const recentResolved = resolved.slice(-10);
+  const priorResolved = resolved.slice(-20, -10);
+  let accuracyDiff = null, accuracyTrend = 'neutral';
+  if (recentResolved.length > 0 && priorResolved.length > 0) {
+    const recentAcc = recentResolved.filter(p => p.correct).length / recentResolved.length * 100;
+    const priorAcc = priorResolved.filter(p => p.correct).length / priorResolved.length * 100;
+    accuracyDiff = recentAcc - priorAcc;
+    accuracyTrend = accuracyDiff > 2 ? 'positive' : accuracyDiff < -2 ? 'negative' : 'neutral';
+  }
+
+  const recentAll = predictions.slice(-10);
+  const priorAll = predictions.slice(-20, -10);
+  let confidenceDiff = null, confidenceTrend = 'neutral';
+  if (recentAll.length > 0 && priorAll.length > 0) {
+    const recentConf = recentAll.reduce((s, p) => s + (p.confidence || 0), 0) / recentAll.length;
+    const priorConf = priorAll.reduce((s, p) => s + (p.confidence || 0), 0) / priorAll.length;
+    confidenceDiff = recentConf - priorConf;
+    confidenceTrend = confidenceDiff > 5 ? 'positive' : confidenceDiff < -5 ? 'negative' : 'neutral';
+  }
+
+  const lastPred = predictions[predictions.length - 1];
+  const confidence = lastPred?.confidence || 0;
+  const expectedMove = parseFloat(lastPred?.expectedMove || 0);
+
+  return {
+    accuracy, accuracyDiff, accuracyTrend,
+    confidence, confidenceDiff, confidenceTrend,
+    takeovers: data.takeovers || 0,
+    expectedMove, expectedTrend: expectedMove >= 0 ? 'positive' : 'negative'
+  };
+}
+
 function updateSummaryCards() {
   COINS.forEach(coin => {
     const data = currentData[coin];
@@ -1730,9 +1842,11 @@ function updateSummaryCards() {
 
     const lastPred = data.predictions[data.predictions.length - 1];
     const lastPrice = data.prices[data.prices.length - 1];
+    const c = coin.toLowerCase();
+    const metrics = calculatePerformanceMetrics(data);
 
     // Price
-    const priceEl = document.getElementById(`${coin.toLowerCase()}Price`);
+    const priceEl = document.getElementById(`${c}Price`);
     if (priceEl && lastPrice) {
       const formatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -1744,45 +1858,64 @@ function updateSummaryCards() {
     }
 
     // Call & Confidence
-    const callEl = document.getElementById(`${coin.toLowerCase()}Call`);
+    const callEl = document.getElementById(`${c}Call`);
     if (callEl && lastPred) {
       const direction = lastPred.direction;
-      const confidence = lastPred.confidence;
       callEl.innerHTML = `
         <span class="direction ${direction === 'UP' ? 'up' : 'down'}">
           ${direction === 'UP' ? '▲' : '▼'} ${direction === 'UP' ? 'BULLISH' : 'BEARISH'}
         </span>
-        <span class="confidence">${confidence}%</span>
+        <span class="confidence">${lastPred.confidence}%</span>
       `;
     }
 
     // Model
-    const modelEl = document.getElementById(`${coin.toLowerCase()}Model`);
-    if (modelEl) {
-      modelEl.textContent = data.currentModel;
+    const modelEl = document.getElementById(`${c}Model`);
+    if (modelEl) modelEl.textContent = data.currentModel;
+
+    // Improving/Declining/Stable status badge, driven by the accuracy trend
+    const statusEl = document.getElementById(`${c}Status`);
+    if (statusEl) {
+      const label = metrics.accuracyTrend === 'positive' ? 'Improving' :
+                    metrics.accuracyTrend === 'negative' ? 'Declining' : 'Stable';
+      const arrow = metrics.accuracyTrend === 'positive' ? '⬆' :
+                    metrics.accuracyTrend === 'negative' ? '⬇' : '➡';
+      statusEl.textContent = `${arrow} ${label}`;
+      statusEl.className = `status-badge ${metrics.accuracyTrend === 'positive' ? 'improving' : metrics.accuracyTrend === 'negative' ? 'declining' : 'stable'}`;
     }
+
+    const setMetric = (valueId, trendId, text, trendClass, trendText) => {
+      const valueEl = document.getElementById(valueId);
+      if (valueEl) valueEl.textContent = text;
+      const trendEl = document.getElementById(trendId);
+      if (trendEl) {
+        trendEl.textContent = trendText;
+        trendEl.className = `metric-trend ${trendClass}`;
+      }
+    };
+
+    setMetric(`${c}Accuracy`, `${c}AccuracyTrend`,
+      `${metrics.accuracy.toFixed(1)}%`, metrics.accuracyTrend,
+      metrics.accuracyDiff == null ? '→ n/a' :
+        `${metrics.accuracyDiff >= 0 ? '↑' : '↓'} ${Math.abs(metrics.accuracyDiff).toFixed(1)}%`);
+
+    setMetric(`${c}Confidence`, `${c}ConfidenceTrend`,
+      `${metrics.confidence}%`, metrics.confidenceTrend,
+      metrics.confidenceDiff == null ? '→ n/a' :
+        `${metrics.confidenceDiff >= 0 ? '↑' : '↓'} ${Math.abs(metrics.confidenceDiff).toFixed(1)}%`);
+
+    // Takeovers is informational, not "good" or "bad" — more model switching
+    // means less stability, so it never gets the green "positive" treatment.
+    setMetric(`${c}TakeoversCount`, `${c}TakeoversTrend`,
+      `${metrics.takeovers}`, 'neutral',
+      metrics.takeovers > 0 ? '→ Active' : '→ Stable');
 
     // Expected move
-    const expectedEl = document.getElementById(`${coin.toLowerCase()}Expected`);
-    if (expectedEl && lastPred) {
-      const move = parseFloat(lastPred.expectedMove);
-      expectedEl.textContent = (move > 0 ? '+' : '') + move.toFixed(2) + '%';
-      expectedEl.style.color = move >= 0 ? '#2ECC71' : '#E74C3C';
-    }
-
-    // Accuracy
-    const accuracyEl = document.getElementById(`${coin.toLowerCase()}Accuracy`);
-    if (accuracyEl) {
-      const correct = data.predictions.filter(p => p.correct === true).length;
-      const total = data.predictions.filter(p => p.correct !== undefined && p.correct !== null).length;
-      const acc = total > 0 ? (correct / total * 100) : 52.0;
-      accuracyEl.textContent = acc.toFixed(1) + '%';
-    }
-
-    // Takeovers count
-    const takeoversEl = document.getElementById(`${coin.toLowerCase()}TakeoversCount`);
-    if (takeoversEl) {
-      takeoversEl.textContent = data.takeovers;
+    const expectedEl = document.getElementById(`${c}Expected`);
+    if (expectedEl) {
+      const sign = metrics.expectedMove > 0 ? '+' : '';
+      expectedEl.textContent = `${sign}${metrics.expectedMove.toFixed(2)}%`;
+      expectedEl.className = `metric-value ${metrics.expectedTrend}`;
     }
   });
 }
@@ -1851,6 +1984,21 @@ function renderCharts() {
   });
 }
 
+function formatPriceTick(value) {
+  return '$' + (value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value.toFixed(2));
+}
+
+function findNearestPrice(prices, targetTs) {
+  if (!prices.length) return null;
+  let closest = prices[0];
+  let closestDiff = Math.abs((prices[0].ts ?? 0) - targetTs);
+  for (let i = 1; i < prices.length; i++) {
+    const diff = Math.abs((prices[i].ts ?? 0) - targetTs);
+    if (diff < closestDiff) { closest = prices[i]; closestDiff = diff; }
+  }
+  return closest;
+}
+
 function renderSingleChart(coin) {
   const data = currentData[coin];
   if (!data) return;
@@ -1866,24 +2014,30 @@ function renderSingleChart(coin) {
   const days = chartDays[coin] || 7;
   const sliceIndex = Math.max(0, data.prices.length - days);
   const slicedPrices = data.prices.slice(sliceIndex);
-  const slicedPredictions = data.predictions.slice(sliceIndex);
-  const slicedSelections = data.selections.slice(sliceIndex);
+  const cutoffTs = slicedPrices[0]?.ts ?? 0;
+  const slicedPredictions = data.predictions.filter(p => (p.ts ?? 0) >= cutoffTs);
+  const slicedSelections = data.selections.filter(s => (s.ts ?? 0) >= cutoffTs);
 
   const priceData = slicedPrices.map(p => ({
     x: p.ts || new Date(p.timestamp).getTime(),
     y: p.price
   }));
 
+  // Pair each prediction with the selection in force at that time, and the
+  // nearest actual price point by timestamp — not the price at the same
+  // array index, since predictions/prices/selections aren't guaranteed to be
+  // sampled on the same cadence or have matching lengths.
   const modelGroups = {};
-  slicedPredictions.forEach((pred, index) => {
-    const sel = slicedSelections[index] || { selected_variant: 'Original k-NN' };
-    const model = sel.selected_variant;
+  slicedPredictions.forEach(pred => {
+    const predTs = pred.ts || new Date(pred.timestamp).getTime();
+    const sel = [...slicedSelections].reverse().find(s => (s.ts ?? 0) <= predTs) || slicedSelections[0];
+    const model = sel?.selected_variant || 'Original k-NN';
     if (!modelGroups[model]) modelGroups[model] = [];
-    const priceVal = slicedPrices[index]?.price || 0;
+    const pricePoint = findNearestPrice(slicedPrices, predTs);
 
     modelGroups[model].push({
-      x: pred.ts || new Date(pred.timestamp).getTime(),
-      y: priceVal,
+      x: predTs,
+      y: pricePoint?.price ?? 0,
       prediction: pred,
       model: model
     });
@@ -1916,28 +2070,32 @@ function renderSingleChart(coin) {
       pointHoverRadius: 9,
       showLine: false,
       order: 1,
+      // Guarded: Chart.js can invoke scriptable dataset options with a context
+      // that has no `.raw` (e.g. legend-icon generation) — an unguarded lookup
+      // throws there and can abort chart creation entirely, which would look
+      // exactly like "prediction points aren't rendering".
       pointStyle: function(context) {
-        const raw = context.raw;
-        if (!raw || !raw.prediction) return 'circle';
-        return raw.prediction.direction === 'UP' ? 'triangle' : 'circle';
+        const pred = context.raw?.prediction;
+        if (!pred) return 'circle';
+        return pred.direction === 'UP' ? 'triangle' : 'circle';
       },
       rotation: function(context) {
-        const raw = context.raw;
-        if (!raw || !raw.prediction) return 0;
-        return raw.prediction.direction === 'UP' ? 0 : 180;
+        const pred = context.raw?.prediction;
+        return pred?.direction === 'UP' ? 0 : 180;
       }
     });
   });
 
   const switchPoints = [];
   let lastModel = null;
-  slicedSelections.forEach((sel, index) => {
+  slicedSelections.forEach(sel => {
     const modelLabel = sel.selected_variant;
+    const selTs = sel.ts || new Date(sel.timestamp).getTime();
     if (lastModel && modelLabel !== lastModel) {
-      const priceVal = slicedPrices[index]?.price || 0;
+      const pricePoint = findNearestPrice(slicedPrices, selTs);
       switchPoints.push({
-        x: sel.ts || new Date(sel.timestamp).getTime(),
-        y: priceVal,
+        x: selTs,
+        y: pricePoint?.price ?? 0,
         from: lastModel,
         to: modelLabel
       });
@@ -1999,11 +2157,15 @@ function renderSingleChart(coin) {
                 return `${context.dataset.label}: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`;
               }
               const p = raw.prediction;
+              // Three-way check on `correct` directly — inferring "wrong" from
+              // actualMove being present would mislabel any resolved-wrong
+              // prediction as "Pending" whenever actualMove is missing.
               const status = p.correct === true ? '✅ Correct' : p.correct === false ? '❌ Wrong' : '⏳ Pending';
               return [
                 `Model: ${raw.model}`,
                 `Call: ${p.direction === 'UP' ? 'BULLISH ▲' : 'BEARISH ▼'} (${p.confidence}% confidence)`,
                 `Expected move: ${p.expectedMove}%`,
+                `Actual move: ${p.actualMove != null ? p.actualMove + '%' : '—'}`,
                 `Status: ${status}`,
                 `Price: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`
               ];
@@ -2021,9 +2183,7 @@ function renderSingleChart(coin) {
         y: {
           grid: { color: '#F0F0F0' },
           ticks: {
-            callback: function(value) {
-              return '$' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : value.toFixed(2));
-            },
+            callback: formatPriceTick,
             font: { size: 9 },
             color: '#718096'
           }
