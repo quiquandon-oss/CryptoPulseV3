@@ -1,16 +1,36 @@
 {
-  "name": "CryptoPulse V2",
-  "short_name": "CP V2",
-  "description": "Standalone BTC prediction model tool",
+  "name": "CryptoPulse V3",
+  "short_name": "CryptoPulse",
+  "description": "Multi-coin AI model predictions dashboard",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0A0C10",
-  "theme_color": "#0A0C10",
+  "background_color": "#F8F9FA",
+  "theme_color": "#4A90E2",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bitcoin widget",
+      "short_name": "BTC",
+      "url": "widget.html?coin=BTC",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Chainlink widget",
+      "short_name": "LINK",
+      "url": "widget.html?coin=LINK",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Ethereum widget",
+      "short_name": "ETH",
+      "url": "widget.html?coin=ETH",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

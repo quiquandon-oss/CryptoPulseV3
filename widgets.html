@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse Widgets</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#4A90E2">
+<style>
+  :root {
+    --color-bg: #F8F9FA;
+    --color-card: #FFFFFF;
+    --color-text: #1A1A2E;
+    --color-text-muted: #718096;
+    --color-border: #E2E8F0;
+    --color-accent: #4A90E2;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 420px; margin: 0 auto; padding: 20px 16px 32px; }
+  h1 { font-size: 1.3rem; font-weight: 800; margin: 0 0 4px; }
+  .sub { font-size: 0.8rem; color: var(--color-text-muted); margin: 0 0 20px; line-height: 1.4; }
+
+  .link-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--color-card);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    text-decoration: none;
+    color: var(--color-text);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 5px solid var(--color-border);
+  }
+  .link-card[data-coin="BTC"] { border-left-color: #F7931A; }
+  .link-card[data-coin="LINK"] { border-left-color: #2A5ADA; }
+  .link-card[data-coin="ETH"] { border-left-color: #627EEA; }
+
+  .link-icon { font-size: 1.6rem; width: 32px; text-align: center; }
+  .link-text { flex: 1; }
+  .link-name { font-weight: 700; font-size: 0.95rem; }
+  .link-sub { font-size: 0.7rem; color: var(--color-text-muted); }
+  .link-arrow { font-size: 1.2rem; color: var(--color-text-muted); }
+
+  .howto {
+    margin-top: 24px;
+    background: var(--color-card);
+    border-radius: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+  }
+  .howto strong { color: var(--color-text); }
+  .howto ol { margin: 6px 0 0; padding-left: 18px; }
+
+  .copy-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    background: var(--color-bg);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+  .copy-row input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.65rem;
+    color: var(--color-text);
+    font-family: ui-monospace, monospace;
+  }
+  .copy-row button {
+    border: none;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CryptoPulse Widgets</h1>
+  <p class="sub">One live card per coin. Tap to view, or copy a link into a home-screen widget app.</p>
+
+  <a class="link-card" data-coin="BTC" href="widget.html?coin=BTC">
+    <span class="link-icon">₿</span>
+    <span class="link-text">
+      <div class="link-name">Bitcoin</div>
+      <div class="link-sub">BTC · price, call, model, accuracy</div>
+    </span>
+    <span class="link-arrow">→</span>
+  </a>
+
+  <a class="link-card" data-coin="LINK" href="widget.html?coin=LINK">
+    <span class="link-icon">🔗</span>
+    <span class="link-text">
+      <div class="link-name">Chainlink</div>
+      <div class="link-sub">LINK · price, call, model, accuracy</div>
+    </span>
+    <span class="link-arrow">→</span>
+  </a>
+
+  <a class="link-card" data-coin="ETH" href="widget.html?coin=ETH">
+    <span class="link-icon">⟠</span>
+    <span class="link-text">
+      <div class="link-name">Ethereum</div>
+      <div class="link-sub">ETH · price, call, model, accuracy</div>
+    </span>
+    <span class="link-arrow">→</span>
+  </a>
+
+  <div class="howto">
+    <strong>Get one on your home screen</strong>
+    <ol>
+      <li>Tap a coin above to open its widget page.</li>
+      <li>Browser menu → <strong>Add to Home screen</strong> — that alone gives you a one-tap launch icon for that coin.</li>
+      <li>For a true glanceable widget (no tap to open), install a free "URL widget" app from the Play Store and paste that coin's link into it — copy it below.</li>
+    </ol>
+    <div class="copy-row"><input readonly id="linkBTC" value=""><button onclick="copyLink('linkBTC')">Copy</button></div>
+    <div class="copy-row"><input readonly id="linkLINK" value=""><button onclick="copyLink('linkLINK')">Copy</button></div>
+    <div class="copy-row"><input readonly id="linkETH" value=""><button onclick="copyLink('linkETH')">Copy</button></div>
+  </div>
+</div>
+
+<script>
+['BTC', 'LINK', 'ETH'].forEach(coin => {
+  document.getElementById('link' + coin).value = new URL(`widget.html?coin=${coin}`, location.href).href;
+});
+function copyLink(id) {
+  const el = document.getElementById(id);
+  el.select();
+  el.setSelectionRange(0, 99999);
+  try {
+    navigator.clipboard.writeText(el.value);
+  } catch (e) {
+    document.execCommand('copy');
+  }
+}
+</script>
+</body>
+</html>
