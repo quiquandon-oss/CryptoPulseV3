@@ -1,0 +1,2564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V2 — BTC Prediction Model</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B0E11">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+  /* Hybrid typography, per review: Inter for UI/prose (the growing
+     Gemini narrative is prose, monospace hurts readability there at
+     length); JetBrains Mono reserved for numbers/data via .font-mono-data,
+     which is where a fixed-width font actually earns its keep. */
+  body { font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .font-mono-data { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; }
+  .material-symbols-outlined { font-variation-settings: 'opsz' 24, 'wght' 400, 'FILL' 0; font-size: 20px; vertical-align: middle; }
+  .glow { box-shadow: 0 0 0 1px rgba(0,224,255,0.15), 0 8px 30px -12px rgba(0,224,255,0.25); }
+  .glow-text { text-shadow: 0 0 12px rgba(0,224,255,0.35); }
+  @keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  @keyframes spin-once { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .spinning { animation: spin-once 0.6s linear infinite; }
+  .pulsing { animation: pulse-dot 1.6s ease-in-out infinite; }
+</style>
+</head>
+<body class="bg-[#0B0E11] text-[#E1E2E7] min-h-screen pb-20 md:pb-8">
+<div class="max-w-3xl mx-auto px-5 py-8 sm:py-12">
+
+  <header class="mb-6">
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-2">
+      <div>
+        <p class="text-[10px] uppercase tracking-[0.25em] text-[#00E0FF]/70 mb-1 font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-[#00E0FF]">monitoring</span>CryptoPulse — Model Lab</p>
+        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">V2<span class="text-[#00E0FF]">.</span></h1>
+      </div>
+      <!-- Status pill (Worker/D1/Model) removed. The refresh button stays
+           -- it has real independent value (force-refresh the current
+           view's data), it's just no longer visually grouped with a
+           status readout that no longer exists. -->
+      <button id="refreshBtn" title="Refresh: fetch fresh price/technical data and re-run the prediction now" class="bg-[#191C1F] border border-[#3B494C] rounded-xl p-2.5 text-[#BAC9CD] hover:text-[#00E0FF] hover:border-[#00E0FF]/40 transition-colors shadow-sm">
+        <svg id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="hidden md:flex gap-1 bg-[#191C1F] border border-[#3B494C] rounded-xl p-1 mb-4 w-fit">
+    <button data-view="dashboard" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"></button>
+    <button data-view="lab" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"></button>
+    <button data-view="learning" class="nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"></button>
+  </nav>
+
+  <!-- Coin selector: LINK added as a genuine second model, not a copy-paste
+       of BTC — different data source, simpler self-bootstrapping technical
+       score, younger and rougher calibration. Switching re-fetches and
+       re-renders the prediction/chart/analysis for whichever coin is active. -->
+  <div id="coinHorizonToggle" class="flex items-center gap-2 mb-6 flex-wrap">
+    <div id="coinTabs" class="flex gap-1 bg-[#191C1F] border border-[#3B494C] rounded-xl p-1 w-fit"></div>
+    <div id="horizonTabs" class="flex gap-1 bg-[#191C1F] border border-[#3B494C] rounded-xl p-1 w-fit"></div>
+  </div>
+
+  <div id="view-dashboard">
+
+    <section id="predictionCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6 hidden transition-all duration-200 hover:border-[#00E0FF]/30 glow">
+      <div class="flex items-center justify-between mb-1">
+        <p id="predictionTitle" class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">BTC · Next 24h</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'predictionNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="predictionNote">A k-NN historical analog model: today's sentiment/technical/regime/bottom-score readout is compared (z-score normalized) against every complete day of history, the most similar days are found, and this is what BTC actually did over the prediction horizon after each of them. The range is the 25th-75th percentile of those outcomes — read it as a spread of what similar setups did, not a guarantee. "Trend strength" is a separate MA-slope guardrail signal (-1 to +1), not part of the k-NN match itself. A "calibrated" badge appears next to the headline % once enough resolved predictions exist to empirically recalibrate it — before that, it's identical to the raw read and stays hidden. The ring at the bottom is this coin/horizon's real resolved-prediction accuracy (— until any have resolved); the signal pill and bars reflect how far today's p_up sits from a coin flip, not a separate forecast.</p>
+      <div class="flex items-baseline gap-3 mb-2 flex-wrap">
+        <span id="predPUp" class="text-3xl font-bold font-mono-data text-[#BAF2FF] glow-text">—</span>
+        <span class="text-sm text-[#BAC9CD]" id="predChanceLabel">chance of a positive 24h return</span>
+        <span id="predCalibBadge"></span>
+      </div>
+      <p id="predVariantLabel" class="hidden text-[10px] text-[#00E0FF] font-semibold mb-2"></p>
+      <p id="predDetail" class="text-xs text-[#BAC9CD] mb-3 font-mono-data"></p>
+      <div id="predTrend"></div>
+      <div id="predAnalogs" class="text-xs text-[#BAC9CD] space-y-1.5 mb-3 mt-3"></div>
+      <p id="predNote" class="text-[11px] text-[#00E0FF]/80 italic mb-2"></p>
+      <p id="calibNote" class="text-[11px] text-[#BAC9CD] mt-3 pt-3 border-t border-[#3B494C]"></p>
+      <div id="predSignalFooter" class="mt-3 pt-3 border-t border-[#3B494C]"></div>
+    </section>
+
+    <section id="predictionEmpty" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6 space-y-3">
+      <div class="h-3 bg-[#3B494C] rounded-full w-1/4 animate-pulse"></div>
+      <div class="h-8 bg-[#3B494C] rounded-xl w-1/2 animate-pulse"></div>
+      <div class="h-3 bg-[#3B494C] rounded-full w-3/4 animate-pulse"></div>
+    </section>
+
+    <section id="chartSection" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-4 sm:p-5 mb-6 transition-all duration-200 hover:border-[#3B494C]/80">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 id="chartTitle" class="text-sm font-semibold">BTC Price vs. Predictions</h2>
+        <div class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'chartNote')">ⓘ Info</button>
+          <div id="rangeTabs" class="flex gap-1 bg-[#0B0E11] rounded-lg p-1"></div>
+          <button id="fullscreenBtn" class="text-[#BAC9CD] hover:text-[#E1E2E7] p-1.5 rounded-md hover:bg-[#0B0E11] transition-colors" title="Full screen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="chartNote">Every triangle is a logged prediction placed on the price line. Shape: ▲ bullish call, ▼ bearish. Fill saturation: confidence level. Ring border: green = correct, red = wrong, grey = pending.</p>
+      <div id="chartContainer" class="relative" style="height:280px;">
+        <canvas id="priceChart"></canvas>
+      </div>
+      <p class="text-[10px] text-[#BAC9CD] mt-2">▲ bullish · ▼ bearish · saturation = confidence · ring: <span class="text-[#4AE176]">green</span> correct · <span class="text-[#FFB4AB]">red</span> wrong · grey pending</p>
+      <p id="chartCountNote" class="text-[11px] text-[#BAC9CD] mt-1 font-mono-data"></p>
+    </section>
+
+    <!-- Recap table: prediction / reality / deviation, one row per logged
+         call. Reuses chartRaw.predictions (already fetched for the chart) —
+         no new backend endpoint needed, same data just shown as a table
+         instead of markers. Deviation = realized return minus the median
+         return the model expected, not just right/wrong — magnitude matters
+         as much as direction here. Collapsible (same <details> pattern as
+         the roadmap) so it doesn't take permanent space; body scrolls
+         internally with a fixed max-height instead of hard-capping to N
+         rows, so nothing gets silently dropped as more predictions log in
+         over time — only how far you have to scroll changes, not what's
+         actually there. -->
+    <details class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-4 sm:p-5 mb-6">
+      <summary class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm font-semibold">Prediction Recap <span id="recapCountBadge" class="text-[#BAC9CD] font-normal"></span></span>
+        <span class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="event.preventDefault(); event.stopPropagation(); toggleNote(this,'recapNote')">ⓘ Info</button>
+          <span class="text-xs text-[#00E0FF] font-mono-data">▼</span>
+        </span>
+      </summary>
+      <p class="hidden text-xs text-[#BAC9CD] mt-3 mb-3 leading-relaxed" id="recapNote">Every prediction targets a fixed horizon (12h or 24h, whichever tab is selected). "Predicted" is the model's called direction/confidence and expected median move; "Reality" is what actually happened once the horizon passed; "Deviation" is the gap between the expected move and the real one — a small deviation means the model's magnitude sense was good even if the direction call is what gets graded for accuracy. Pending rows haven't reached their horizon mark yet. Scroll within the table to see older predictions — nothing is dropped.</p>
+      <div class="overflow-x-auto overflow-y-auto mt-3" style="max-height:420px;">
+        <table class="w-full text-xs">
+          <thead class="text-[#BAC9CD] uppercase tracking-wide border-b border-[#3B494C] sticky top-0 bg-[#191C1F]"><tr>
+            <th class="text-left font-medium px-2 py-2">Date</th>
+            <th class="text-right font-medium px-2 py-2">Predicted</th>
+            <th class="text-right font-medium px-2 py-2">Reality</th>
+            <th class="text-right font-medium px-2 py-2">Deviation</th>
+          </tr></thead>
+          <tbody id="recapTbody"><tr><td colspan="4" class="px-2 py-6 text-center text-[#BAC9CD]">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Calibration Over Time removed from Dashboard — consolidated into
+         the Lab tab's "All models, same graph" chart, which now covers
+         Original k-NN, Experimental, k-NN Calibrated, Challenger Flat,
+         Challenger Tilted, and Challenger Calibrated together on one
+         shared timeline, rather than this Dashboard chart's narrower
+         Original/Experimental-only view sitting alongside two other
+         partial charts in the Lab tab. One canonical benchmark chart
+         instead of three overlapping ones. -->
+    <div class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-4 sm:p-5 mb-6 flex items-center justify-between gap-3">
+      <p class="text-xs text-[#BAC9CD]">Model accuracy over time now lives in the <span class="text-[#00E0FF] font-semibold">Lab</span> tab — one chart covering every model variant, not just this one.</p>
+      <button onclick="activeView='lab'; renderNav();" class="shrink-0 text-xs font-semibold text-[#0B0E11] bg-[#00E0FF] rounded-lg px-3 py-1.5">Open Lab</button>
+    </div>
+
+    <!-- Offline backtest results: technical_score-only (multi-year Yahoo
+         data), regime_mag/sentiment-only (D1's own shorter history), and
+         all-4-combined — a genuinely different test than the live
+         calibration loop above, run manually via /backtest-* endpoints
+         rather than on a cron. Logged to backtest_results every run so
+         this comparison stays available to re-check as samples grow,
+         instead of needing to re-derive it from raw D1 queries each time. -->
+    <details class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-4 sm:p-5 mb-6">
+      <summary class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm font-semibold">Offline Backtest History</span>
+        <span class="text-xs text-[#00E0FF] font-mono-data">▼</span>
+      </summary>
+      <p class="text-xs text-[#BAC9CD] mt-3 mb-3 leading-relaxed">Each row is a single manually-triggered backtest run (technical_score alone over years of Yahoo price data; regime_mag/sentiment alone over D1's shorter own history; or all 4 combined) — not part of the live cron. Small samples for anything but technical_score — treat as directional until they've been re-run with more history.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="text-[#BAC9CD] uppercase tracking-wide border-b border-[#3B494C]"><tr>
+            <th class="text-left font-medium px-2 py-2">Test</th>
+            <th class="text-right font-medium px-2 py-2">n</th>
+            <th class="text-right font-medium px-2 py-2">Accuracy</th>
+            <th class="text-right font-medium px-2 py-2">Brier</th>
+            <th class="text-right font-medium px-2 py-2">vs Baseline</th>
+          </tr></thead>
+          <tbody id="backtestTbody"><tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Regime-conditional test: does technical_score's own accuracy differ
+         when that day's sentiment was above vs below median — a sharper
+         hypothesis than "reweight the features," from a paper finding
+         technical indicators work better during "greed" than "fear." -->
+    <details class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-4 sm:p-5 mb-6">
+      <summary class="flex items-center justify-between cursor-pointer select-none">
+        <span class="text-sm font-semibold">Technical Score by Sentiment Regime</span>
+        <span class="text-xs text-[#00E0FF] font-mono-data">▼</span>
+      </summary>
+      <p class="text-xs text-[#BAC9CD] mt-3 mb-3 leading-relaxed">Same technical_score-only walk-forward test as the backtest above, but every prediction is tagged with that day's actual sentiment reading, then split by whether it was above or below the median. If technical_score performs meaningfully differently between the two halves, that's evidence the right fix isn't a fixed weight — it's switching which feature leads depending on current sentiment regime.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="text-[#BAC9CD] uppercase tracking-wide border-b border-[#3B494C]"><tr>
+            <th class="text-left font-medium px-2 py-2">Regime</th>
+            <th class="text-right font-medium px-2 py-2">n</th>
+            <th class="text-right font-medium px-2 py-2">Accuracy</th>
+            <th class="text-right font-medium px-2 py-2">Brier</th>
+            <th class="text-right font-medium px-2 py-2">vs Baseline</th>
+          </tr></thead>
+          <tbody id="regimeSplitTbody"><tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- ═══ LAB ═══ Consolidates what used to be three separate tabs
+       (Analysis, Challenger, Lab) into one, since the coin/horizon toggle
+       used to eagerly reload all three on every click/tab-switch
+       regardless of which was visible -- see refreshAll()'s comment.
+       Section order below: narrative analysis, then Challenger (a real,
+       stable, currently-deployed model -- kept visually distinct from the
+       experimental section that follows, not just another undecided
+       design choice), then the pre-existing Lab experiments unchanged. ═══ -->
+  <div id="view-lab" class="hidden">
+    <!-- ---- Challenger — a real, stable, currently-deployed model, NOT
+         an undecided experiment. Deliberately kept visually distinct from
+         the "Experimental" section below via the colored label, so
+         merging tabs doesn't accidentally read as "we're not sure this
+         one's staying." Fully isolated from the k-NN above (does not
+         touch, import, or affect it in any way) -- logged in parallel for
+         comparison, motivated by a confirmed finding: the k-NN scored
+         22.9% accuracy on regime-anomalous days against a 97.1% naive
+         trend-continuation baseline in the same window. See
+         PulseWorkerV2's runChallengerPrediction for the full reasoning. ---- -->
+    <p class="text-[10px] uppercase tracking-wide text-[#00E0A0] font-bold mb-2 mt-8">Challenger — Stable Model</p>
+    <section id="challengerLiveCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Challenger — Live Read</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'challengerNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="challengerNote">A separate model, NOT a variant of the k-NN above. When today is regime-anomalous (the same tripwire the k-NN itself flags), this defers to a simple, transparent trend-persistence read instead of trusting the k-NN's own number in exactly the conditions it's been empirically bad in. When NOT anomalous, it defers to the k-NN's own p_up — on the theory that when today DOES resemble history well, the k-NN's own logic is the more trustworthy read. The "Tilted" variant additionally nudges the flat read using Foufi's daily short-term driver tag (macro/tradfi only) and his stated lean for that category, when a fresh (≤30h) digest has one. The trend-strength bar below is a separate guardrail (dampens, never flips, a call that disagrees with a strong MA-slope trend) — shown for transparency on what nudged this specific read, not a forecast itself. Pure comparison logging — this does not feed the Dashboard prediction above, the Regime Scorecard, or anything else.</p>
+      <div id="challengerLiveBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <section id="challengerCalibCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <h2 class="text-sm font-semibold mb-3">Challenger vs. Baselines</h2>
+      <div id="challengerCalibBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <section id="challengerRecapCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <h2 class="text-sm font-semibold mb-3">Recent Predictions</h2>
+      <div id="challengerRecapBody" style="max-height:320px;overflow-y:auto"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- ---- Pre-existing Lab experiments, unchanged. A testing space for
+         undecided design choices, not a settled feature -- same "don't
+         trust one number, compare it" ethos as Challenger vs. k-NN,
+         applied to presentation decisions instead of model logic.
+         Nothing here is final; whichever option gets picked is what a
+         future pass would hardcode into the real Dashboard. ---- -->
+    <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-bold mb-2 mt-8">Experimental — undecided design choices</p>
+    <section id="labWeightingCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Combined Accuracy — which formula?</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labWeightingNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="labWeightingNote">Simple average treats all 4 coin/horizon combos equally regardless of how many resolved predictions back each one. Pooled (n-weighted) is mathematically the same as Σcorrect/Σresolved — a combo with 150 resolved predictions gets proportionally more say than one with 20. They're the only two meaningfully different formulas; a third "weighted by n" option would just be pooled again.</p>
+      <div id="labWeightingBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <section id="labHeroCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Hero label — which name?</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labHeroNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="labHeroNote">"Sentiment" isn't used here on purpose — V1 already has an actual Sentiment Engine (Fear & Greed, ETF flows, etc.); reusing the word for "which way these two k-NN models lean" would blur the two apps together. Both cards use the pooled accuracy from the section above and live, identical numbers — only the label text differs.</p>
+      <div id="labHeroBody" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </section>
+
+    <section id="labCompareCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Challenger vs. every other model — <span id="labCompareCoinLabel"></span></p>
+        <div class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labCompareNote')">ⓘ Info</button>
+          <button id="labCompareFullscreenBtn" class="text-[#BAC9CD] hover:text-[#E1E2E7] p-1.5 rounded-md hover:bg-[#0B0E11] transition-colors" title="Full screen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="labCompareNote">Up to 8 bars now (was 6) — added k-NN Calibrated and Challenger Calibrated, sourced from the same expanding-history data the chart below already uses, not a new fetch. These are NOT computed on identical sample sizes (Challenger started later, Experimental and the Calibrated variants each need their own minimum resolved count before they exist) — each bar's own n is printed underneath for that reason. Uses whichever coin/horizon is selected above.</p>
+      <div style="height:260px" id="labCompareChartContainer"><canvas id="labCompareChart"></canvas></div>
+      <p class="text-xs text-[#BAC9CD] mt-2 text-center" id="labCompareCountNote"></p>
+    </section>
+
+    <!-- "Challenger precision over time" removed here — consolidated into
+         the "All models, same graph" chart above, which now includes
+         Challenger Flat/Tilted/Calibrated alongside the core model, on one
+         shared timeline, rather than a separate chart showing only
+         Challenger's own subset of variants. -->
+
+    <section id="labCombinedHistoryCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">All models, same graph — <span id="labCombinedHistoryCoinLabel"></span></p>
+        <div class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labCombinedHistoryNote')">ⓘ Info</button>
+          <button id="labCombinedHistoryFullscreenBtn" class="text-[#BAC9CD] hover:text-[#E1E2E7] p-1.5 rounded-md hover:bg-[#0B0E11] transition-colors" title="Full screen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="labCombinedHistoryNote">The one canonical benchmark chart — every model variant that exists (Original k-NN, Experimental, k-NN Calibrated, Challenger Flat, Challenger Tilted, Challenger Calibrated), always compared together, on one time axis, since V2's actual beginning. Standing rule: a younger variant's line starts wherever its own data starts and is simply shorter — never padded, never hidden for having less history. Defaults to ALL; the range tabs zoom in from there, they don't change what's being compared.</p>
+      <div class="flex items-center justify-between mb-2">
+        <div id="labCombinedHistoryRangeTabs" class="flex gap-1"></div>
+      </div>
+      <div style="height:280px" id="labCombinedHistoryChartContainer"><canvas id="labCombinedHistoryChart"></canvas></div>
+      <p class="text-xs text-[#BAC9CD] mt-2 text-center" id="labCombinedHistoryCountNote"></p>
+    </section>
+
+    <section id="selectedModelCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Selected Model — <span id="selectedModelCoinLabel"></span></p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'selectedModelNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="selectedModelNote">The "council build" — Condition-Matched Selection. Not "which variant has the best recent accuracy" (that's the shallow, explicitly-rejected approach this session already identified as noise-chasing) — instead, "among historical moments that looked like THIS one, which variant was actually right when it made THIS SAME directional call." A variant needs 50+ resolved predictions of its own before being considered, and its local edge must clear a significance bar that gets stricter the more variants are being compared. If nothing clears the bar, it explicitly falls back to Original k-NN rather than forcing a confident-looking pick — that fallback is the common, healthy state early on, not an error.</p>
+      <div id="selectedModelBody" class="text-sm text-[#BAC9CD]">Loading…</div>
+    </section>
+
+    <section id="labModelHealthCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Model Health & Recent Trend — is it actually improving?</p>
+        <div class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'labModelHealthNote')">ⓘ Info</button>
+          <button id="labModelHealthFullscreenBtn" class="text-[#BAC9CD] hover:text-[#E1E2E7] p-1.5 rounded-md hover:bg-[#0B0E11] transition-colors" title="Full screen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="labModelHealthNote">"Recent" is the last 40 resolved predictions for each combo; "Prior" is everything before that — computed by differencing the same expanding-window data the charts above already use, not a separate fetch. This exists specifically to answer "did that last fix actually help" without needing to remember what the numbers were last time or query the database by hand. A combo with fewer than 50 total resolved predictions doesn't have enough history yet to split meaningfully and shows as pending instead of a misleading number. Recent sample sizes here are still small (30-50) — a single-digit swing is normal noise, not a verdict.<br><br>The indented "↳ Calibrated" rows are a genuinely different thing from the row above them, not a duplicate: they're a probability adjustment built from that model's OWN accumulated resolved history (decile-bucket recalibration, rebuilt daily), reused as-is for both the core model and Challenger. Never replaces the row above it — shown separately so whether this adaptive layer actually helps gets decided by watching it over real time, not assumed on the way in. Needs its own 20+ resolved predictions before the underlying curve exists at all, on top of the 50 this table already requires — will show "not enough history" for longer than the row above it, that's expected.</p>
+      <p class="text-xs text-[#BAC9CD] mb-2" id="labModelHealthChartLabel">Prior vs. Recent — <span id="labModelHealthChartCoin"></span></p>
+      <div style="height:240px" id="labModelHealthChartContainer"><canvas id="labModelHealthChart"></canvas></div>
+      <div id="labModelHealthBody" class="text-sm text-[#BAC9CD] mt-4">Loading…</div>
+    </section>
+  </div>
+
+  <!-- ═══ AI LEARNING TAB ═══ Exposes CryptoPulseV2's continuous-learning
+       loop. Two live, already-deployed endpoints back this: /select-variant
+       and /selection-history (both real, both in production today). The
+       richer /api/learning/daily and /api/learning/chatgpt endpoints exist
+       in code but are on an unmerged branch (feature/continuous-learning-
+       foundation, PulseWorkerV2) — this view calls them anyway (that's the
+       real, intended path) and shows an honest "Unavailable" state until
+       that branch merges and deploys, rather than blocking on it. Gemini
+       investigation results, the full experiment lifecycle (EXP-NNN
+       stages), and per-variant eligibility for variants that never reached
+       50 resolved predictions have NO backend endpoint at all yet — those
+       sections say so plainly instead of inventing data. ═══ -->
+  <div id="view-learning" class="hidden">
+
+    <!-- Section 1 — Status -->
+    <section id="learnStatusCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div>
+          <h2 class="text-base font-bold">AI Learning</h2>
+          <p class="text-xs text-[#BAC9CD] mt-0.5">How CryptoPulse learns from predictions, outcomes and experiments.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnStatusNote')">ⓘ Info</button>
+          <button id="learnRefreshBtn" class="text-[10px] text-[#BAC9CD] hover:text-[#00E0FF] border border-[#3B494C] hover:border-[#00E0FF]/40 rounded-md px-2 py-1 transition-colors flex items-center gap-1">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6"/></svg>Refresh
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 mt-2 leading-relaxed" id="learnStatusNote">Each item below reflects a real signal from the backend — a status only shows "Healthy"/"Active" when a call actually succeeded, never a placeholder. "Unavailable" means no endpoint exists yet or the current deploy doesn't include it, not that something is broken.</p>
+      <div id="learnStatusGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3"></div>
+    </section>
+
+    <!-- Section 2 — Learning Loop -->
+    <section id="learnLoopCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Learning Loop</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnLoopNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnLoopNote">Each stage is a real step in the architecture, not a promise of automatic flow between them — a "connected" badge means this build actually calls a live endpoint for that stage; "not yet wired" means the stage is designed (see .ai/ in the CryptoPulseV2 repo) but has no queryable API today. No stage ever auto-advances to the next.</p>
+      <div id="learnLoop" class="flex flex-col md:flex-row md:items-stretch gap-1.5 mt-3"></div>
+    </section>
+
+    <!-- Section 3 — KPI Snapshot -->
+    <section id="learnKpiCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Current Learning Snapshot</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnKpiNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnKpiNote">Sourced entirely from GET /api/learning/daily — accuracy/Brier/calibration shown here are the BTC (all horizons combined) figures from that endpoint, never recomputed in this browser. The four "awaiting" experiment counts aren't broken out by stage in the current backend response — they show "Not available" rather than a guess.</p>
+      <div id="learnKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3"></div>
+    </section>
+
+    <!-- Section 4 — Model Selection (live, per current coin/horizon) -->
+    <section id="learnSelectionCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Current Selection — <span id="learnSelectionCoinLabel"></span></p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnSelectionNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnSelectionNote">Live from GET /select-variant — runs the real Dynamic Classifier Selection logic on request, the same call the backend cron uses. A variant needs 50+ of its own resolved predictions before it's even compared (SELECTION_MIN_HISTORY) — variants below that bar aren't in the "eligible variants compared" list at all, since the backend doesn't return them. ELIGIBLE (compared, cleared the history bar) is not the same as SELECTED (the one actually chosen this round) — both are shown separately below.</p>
+      <div id="learnSelectionBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- Section 5 — Recent Learning Events -->
+    <section id="learnEventsCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <h2 class="text-sm font-semibold mb-1">Recent Learning Events — <span id="learnEventsCoinLabel" class="text-[#BAC9CD] font-normal text-xs"></span></h2>
+      <p class="text-xs text-[#BAC9CD] mb-3">Real selection decisions from GET /selection-history for the coin/horizon selected above — not a fabricated cross-pipeline feed.</p>
+      <div id="learnEventsBody" style="max-height:320px;overflow-y:auto"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- Section 6 — Experiment Pipeline -->
+    <section id="learnExperimentsCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Experiment Pipeline</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnExperimentsNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnExperimentsNote">candidate_experiments from GET /api/learning/daily is the only backend-populated source for this section today, and nothing currently writes to it — an empty list here is an accurate reflection of the backend, not a loading failure. Full experiment lifecycle tracking (EXP-NNN, stages, backtest/OOS results) exists as markdown files in PulseWorkerV2's /learning/ directory, not yet as a queryable API.</p>
+      <div id="learnExperimentsBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- Section 6.5 — Analyst Relay: the investigation mechanism. Was
+         originally built as a fallback for when the paid grounded API path
+         was rate-limited; that automated path has since been removed
+         entirely (Google Search grounding requires a funded, billing-
+         enabled Cloud project -- a recurring cost this project stopped
+         paying). This is now the only investigation mechanism, not a
+         fallback for anything -- see relayContent's own note. -->
+    <section id="learnRelayCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Analyst Relay</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="loadAnalystRelayPrompt()">↻ Refresh</button>
+      </div>
+      <p class="text-[10px] text-[#4B5563] mb-3 leading-relaxed">How market intelligence gets investigated: real evidence, computed the same way as before, but you paste the prompt into the free Gemini app yourself and bring the answer back — no paid API grounding. Real catalyst data either way, but a pasted response has no verifiable search metadata the way an API response would, so this is never claimed as machine-verified.</p>
+      <div id="relayContent"><button class="w-full bg-[#1A2530] border border-[#3B494C] rounded-xl py-2 text-xs font-semibold text-[#E1E2E7]" onclick="loadAnalystRelayPrompt()">Check for a candidate</button></div>
+    </section>
+
+    <!-- Section 7 — AI Responsibility Cards -->
+    <section id="learnRolesCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold mb-3">AI Responsibility Model</p>
+      <div id="learnRolesGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- Section 8 — Learning by Regime -->
+    <section id="learnRegimeCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Learning by Regime</p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnRegimeNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnRegimeNote">Regime taxonomy is whatever the backend's regime_analysis actually returns (trend/volatility/anomaly buckets built from each prediction's own stored volatility_percentile and trend_strength) — nothing here is a frontend-invented category.</p>
+      <div id="learnRegimeBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- Section 9 — Model Variant Comparison -->
+    <section id="learnVariantsCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Model Variant Comparison — <span id="learnVariantsCoinLabel"></span></p>
+        <button class="text-[10px] text-[#BAC9CD] hover:text-[#E1E2E7] border border-[#3B494C] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'learnVariantsNote')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#BAC9CD] mb-3 leading-relaxed" id="learnVariantsNote">Same live /select-variant response as the Current Selection section above, reused (not a second fetch). Only shows variants that cleared the 50-resolved-prediction eligibility bar — the backend doesn't return variants below it, so this list can't show "active but not yet eligible" variants even though some may exist.</p>
+      <div id="learnVariantsBody"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+    <!-- Section 10 — Audit Trail -->
+    <section id="learnAuditCard" class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 mb-6">
+      <button id="learnAuditToggleBtn" class="w-full flex items-center justify-between text-left" onclick="toggleLearnAudit()" aria-expanded="false" aria-controls="learnAuditBody">
+        <span class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Learning Audit Trail</span>
+        <span id="learnAuditChevron" class="material-symbols-outlined text-[16px] text-[#BAC9CD] transition-transform">expand_more</span>
+      </button>
+      <p class="text-xs text-[#BAC9CD] mt-1">Every selection decision, traceable — same underlying data as Recent Learning Events, in raw audit form.</p>
+      <div id="learnAuditBody" class="hidden mt-3"><p class="text-xs text-[#BAC9CD]">Loading…</p></div>
+    </section>
+
+  </div>
+
+  <footer class="mt-10 text-[11px] text-[#4B5563]">
+    Backend: <a href="https://github.com/quiquandon-oss/PulseWorkerV2" class="underline hover:text-[#BAC9CD]">PulseWorkerV2</a> · Data: shared with <a href="https://github.com/quiquandon-oss/CryptoPulse" class="underline hover:text-[#BAC9CD]">CryptoPulse</a>
+  </footer>
+
+</div>
+
+<!-- Bottom mobile nav — same pattern as the top pill nav (desktop), just
+     the mobile-friendly icon pattern from the design review. Wired to the
+     exact same activeView state and renderNav()/click logic below, via the
+     shared .nav-tab class — no new navigation logic, only a second surface
+     for it. 5 items now (dashboard/analysis/challenger/lab/learning) --
+     px-4 per button was sized for fewer items and clipped the 5th tab off
+     narrow phone widths with no way to reach it; px-2 + overflow-x-auto
+     fits all 5 on typical widths and scrolls instead of silently clipping
+     on anything narrower. -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 px-1 bg-[#0B0E11] border-t border-[#3B494C] z-50 overflow-x-auto">
+  <button data-view="dashboard" class="nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 rounded-xl transition-colors shrink-0">
+    <span class="material-symbols-outlined text-[20px]">monitoring</span>
+    <span class="text-[10px] font-semibold uppercase tracking-wide">Dashboard</span>
+  </button>
+  <button data-view="lab" class="nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 rounded-xl transition-colors shrink-0">
+    <span class="material-symbols-outlined text-[20px]">science</span>
+    <span class="text-[10px] font-semibold uppercase tracking-wide">Lab</span>
+  </button>
+  <button data-view="learning" class="nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 rounded-xl transition-colors shrink-0">
+    <span class="material-symbols-outlined text-[20px]">school</span>
+    <span class="text-[10px] font-semibold uppercase tracking-wide">Learning</span>
+  </button>
+</nav>
+
+<script>
+function toggleNote(btn, noteId){
+  const el = document.getElementById(noteId);
+  if(!el) return;
+  const nowHidden = el.classList.toggle('hidden');
+  btn.textContent = nowHidden ? 'ⓘ Info' : 'ⓘ Hide';
+}
+
+const WORKER_URL = 'https://pulseworker-v2.quiquandon.workers.dev';
+
+// setDot() removed along with its only callers (checkWorker/checkDb/the
+// modelStatus dots), which all went with the status pill.
+
+// checkWorker()/checkDb() removed along with the status pill they used to
+// populate -- no reason to poll / and /db-check on every page load and
+// every refresh click when nothing displays the result anymore.
+
+// ---- Coin config: LINK is a genuinely different pipeline (own endpoints,
+// own price field names, leaner Gemini schema), not BTC with a different
+// label swapped in — this config just points each shared UI piece at the
+// right place for whichever coin is active. ----
+const COIN_CONFIG = {
+  BTC: {
+    label: 'BTC', predict: '/predict', calib: '/calibration', calibHistory: '/calibration-history', chart: '/chart-data', analysis: '/gemini-analysis',
+    priceNowField: 'btc_price_now', priceHistField: 'btc_price', predPriceField: 'btc_price_at_prediction',
+  },
+  LINK: {
+    label: 'LINK', predict: '/link-predict', calib: '/link-calibration', calibHistory: '/link-calibration-history', chart: '/link-chart-data', analysis: '/link-gemini-analysis',
+    priceNowField: 'link_price_now', priceHistField: 'link_price', predPriceField: 'link_price_at_prediction',
+  },
+  // ETH's own model, deliberately narrower feature set (technical_score +
+  // eth_regime_mag only, both self-computed — no borrowed BTC data, unlike
+  // LINK). No analysis route — no ETH-specific Gemini narrative exists,
+  // same honest gap as the model itself: newer, less proven, shown as such
+  // rather than papered over.
+  ETH: {
+    label: 'ETH', predict: '/eth-predict', calib: '/eth-calibration', calibHistory: '/eth-calibration-history', chart: '/eth-chart-data', analysis: null,
+    priceNowField: 'eth_price_now', priceHistField: 'eth_price', predPriceField: 'eth_price_at_prediction',
+  },
+};
+const COINS = ['BTC', 'LINK', 'ETH'];
+const HORIZONS = [12, 24];
+let currentCoin = 'BTC';
+let currentHorizon = 24;
+
+function buildCoinTabs(){
+  const host = document.getElementById('coinTabs');
+  host.innerHTML = COINS.map(c =>
+    `<button data-coin="${c}" class="coin-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${c===currentCoin ? 'bg-[#00E0FF] text-[#0B0E11]' : 'text-[#BAC9CD] hover:text-[#E1E2E7]'}">${c}</button>`
+  ).join('');
+  host.querySelectorAll('.coin-tab').forEach(btn => {
+    btn.onclick = () => { currentCoin = btn.dataset.coin; buildCoinTabs(); refreshAll(); };
+  });
+}
+
+function buildHorizonTabs(){
+  const host = document.getElementById('horizonTabs');
+  host.innerHTML = HORIZONS.map(h =>
+    `<button data-horizon="${h}" class="horizon-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${h===currentHorizon ? 'bg-[#00E0FF] text-[#0B0E11]' : 'text-[#BAC9CD] hover:text-[#E1E2E7]'}">${h}H</button>`
+  ).join('');
+  host.querySelectorAll('.horizon-tab').forEach(btn => {
+    btn.onclick = () => { currentHorizon = Number(btn.dataset.horizon); buildHorizonTabs(); refreshAll(); };
+  });
+}
+
+function refreshAll(){
+  const cfg = COIN_CONFIG[currentCoin];
+  // Optimistic, instant placeholder only -- loadPrediction() (called via
+  // loadDashboardIfNeeded below) is now the authoritative source of truth
+  // for predictionTitle, using values it captures at its own call time and
+  // guarded against a slower/older call overwriting a newer one. This line
+  // just gives immediate visual feedback that a click registered, before
+  // the real fetch resolves; it will always be correctly overwritten
+  // moments later regardless.
+  document.getElementById('predictionTitle').textContent = `${cfg.label} · Next ${currentHorizon}h`;
+  document.getElementById('chartTitle').textContent = `${cfg.label} Price vs. Predictions (${currentHorizon}h)`;
+  if(chartInstance){ chartInstance.destroy(); chartInstance = null; }
+  // Only the currently visible view reloads -- loadDashboardIfNeeded/
+  // loadLabIfNeeded compare against the new coin/horizon combo key, so
+  // switching to a different tab afterward still picks up the change
+  // (via the same functions called from renderNav) without needing a
+  // second network round of loads fired from here too.
+  if (activeView === 'dashboard') loadDashboardIfNeeded();
+  if (activeView === 'lab') loadLabIfNeeded();
+  if (activeView === 'learning' && _learningLoaded) loadLearningSelection();
+}
+
+let _predictionRequestSeq = 0;
+
+async function loadPrediction(){
+  // Captured once, right now, and used for the ENTIRE rest of this call --
+  // never re-read from the mutable currentCoin/currentHorizon globals
+  // later in this function. Two overlapping calls (e.g. a fast double
+  // toggle-click) each get their own consistent snapshot instead of
+  // reading whatever the globals happen to be by the time their own
+  // await resolves, which is what let title and body genuinely desync
+  // (title set synchronously per-click in refreshAll(); body set here,
+  // asynchronously, sometimes finishing in a different order than the
+  // clicks that triggered it).
+  const mySeq = ++_predictionRequestSeq;
+  const coinAtCall = currentCoin;
+  const horizonAtCall = currentHorizon;
+  const cfg = COIN_CONFIG[coinAtCall];
+  const card = document.getElementById('predictionCard');
+  const empty = document.getElementById('predictionEmpty');
+  card.classList.add('hidden');
+  empty.classList.remove('hidden');
+  empty.innerHTML = `<div class="h-3 bg-[#3B494C] rounded-full w-1/4 animate-pulse"></div><div class="h-8 bg-[#3B494C] rounded-xl w-1/2 animate-pulse mt-3"></div><div class="h-3 bg-[#3B494C] rounded-full w-3/4 animate-pulse mt-3"></div>`;
+  try{
+    const r = await fetch(WORKER_URL + cfg.predict + '?horizon=' + horizonAtCall);
+    const d = await r.json();
+    // A newer call already started since this one began -- its own render
+    // (already done, or about to happen) is the one that should win.
+    // Writing this response now would either be redundant or, worse,
+    // stale data overwriting a fresher, already-correct render.
+    if (mySeq !== _predictionRequestSeq) return;
+
+    // Title/body always set together, from the SAME captured values that
+    // fetched this exact data -- can never point at different coins.
+    document.getElementById('predictionTitle').textContent = `${cfg.label} · Next ${horizonAtCall}h`;
+
+    if(!d.ok || d.status !== 'ok'){
+      empty.innerHTML = `<p class="text-sm text-[#BAC9CD]">${
+        d.status === 'insufficient_data' ? `Not enough history yet (${d.n_available}/${d.min_required} days needed).` :
+        d.status === 'insufficient_resolved_analogs' ? `Too few resolved ${horizonAtCall}h outcomes (${d.n_resolved}/${d.min_required}).` :
+        'Model unavailable right now.'
+      }</p>`;
+      return;
+    }
+    card.classList.remove('hidden');
+    empty.classList.add('hidden');
+
+    // ---- Best-model wiring: /predict already runs selectBestVariant()
+    // and returns the result as d.selection, including chosen_p_up -- the
+    // correct probability for whichever variant is CURRENTLY winning,
+    // regardless of which one it is. Previously ignored entirely; the
+    // headline always showed d.p_up (the raw original model) no matter
+    // what the selection layer had actually decided. Same idea as the
+    // Current Selection card on AI Learning, applied here to the number
+    // people actually look at day to day. ----
+    const selection = (d.selection && d.selection.ok && d.selection.chosen_variant) ? d.selection : null;
+    const usingNonOriginal = selection && selection.chosen_variant !== 'original';
+    const headlinePUp = usingNonOriginal ? selection.chosen_p_up : d.p_up;
+
+    document.getElementById('predPUp').textContent = Math.round(headlinePUp * 100) + '%';
+    document.getElementById('predChanceLabel').textContent = `chance of a positive ${horizonAtCall}h return`;
+    const variantLabelEl = document.getElementById('predVariantLabel');
+    if (usingNonOriginal) {
+      variantLabelEl.textContent = `via ${SELECTION_VARIANT_LABELS[selection.chosen_variant] || selection.chosen_variant} — currently the best-performing model for ${coinAtCall} · ${horizonAtCall}h`;
+      variantLabelEl.classList.remove('hidden');
+      document.getElementById('predCalibBadge').innerHTML = ''; // the raw/calibrated comparison badge is specific to the original model's own two reads -- not meaningful once a different variant is headlined
+    } else {
+      variantLabelEl.classList.add('hidden');
+      document.getElementById('predCalibBadge').innerHTML = calibBadge(d.p_up, d.calibrated_p_up);
+    }
+
+    document.getElementById('predTrend').innerHTML = renderTrendBar(d.trend_strength);
+    const priceNow = d[cfg.priceNowField];
+    document.getElementById('predDetail').textContent =
+      `${cfg.label} $${priceNow.toLocaleString()} now · range ${d.return_range_pct[0]>0?'+':''}${d.return_range_pct[0]}% to ${d.return_range_pct[1]>0?'+':''}${d.return_range_pct[1]}% (median ${d.median_analog_return_pct>0?'+':''}${d.median_analog_return_pct}%) · ${d.n_analogs} similar days`;
+
+    // "Most similar days" is always the original k-NN's own reasoning --
+    // Challenger doesn't have an analog-based explanation to substitute,
+    // so this stays as-is, just clearly labeled when a different variant
+    // is the one actually headlined above, so it's never mistaken for
+    // that variant's own reasoning.
+    document.getElementById('predAnalogs').innerHTML =
+      `<p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] mb-1.5 font-semibold">Most similar days${usingNonOriginal ? ' (Original model\'s own reasoning)' : ''}</p>` +
+      d.top_analogs.map(a => {
+        const badgeClass = a.return_pct >= 0 ? 'bg-[#4AE176]/10 text-[#4AE176] border border-[#4AE176]/20' : 'bg-[#FFB4AB]/10 text-[#FFB4AB] border border-[#FFB4AB]/20';
+        return `<div class="flex justify-between items-center py-1 px-2 rounded-lg bg-[#0B0E11] font-mono-data text-xs"><span>${a.date}</span><span class="px-2 py-0.5 rounded-md ${badgeClass}">${a.return_pct > 0 ? '+' : ''}${a.return_pct}%</span></div>`;
+      }).join('');
+
+    document.getElementById('predNote').textContent = d.note;
+
+    // Calibration block also switches to whichever variant is headlined --
+    // showing the original model's 48%-accuracy-fails-to-beat-baseline
+    // track record underneath a DIFFERENT variant's number would imply
+    // that history belongs to the number being shown, when it doesn't.
+    let accuracyForFooter = 0, nResolvedForFooter = 0;
+    if (usingNonOriginal) {
+      const vc = await (await fetch(WORKER_URL + '/variant-calibration?coin=' + coinAtCall + '&horizon=' + horizonAtCall + '&variant=' + selection.chosen_variant)).json();
+      if (mySeq !== _predictionRequestSeq) return; // superseded while this second fetch was in flight
+      document.getElementById('calibNote').textContent = (!vc.ok || !vc.n_resolved)
+        ? (vc.note || vc.error || 'No calibration data yet for this variant.')
+        : `Calibration (${SELECTION_VARIANT_LABELS[vc.variant] || vc.variant}): ${vc.n_resolved} resolved · ${Math.round(vc.accuracy*100)}% accuracy · Brier ${vc.brier} (baseline ${vc.naive_baseline_brier}) — ${vc.note}`;
+      accuracyForFooter = vc.accuracy || 0;
+      nResolvedForFooter = vc.n_resolved || 0;
+    } else {
+      const c = await (await fetch(WORKER_URL + cfg.calib + '?horizon=' + horizonAtCall)).json();
+      if (mySeq !== _predictionRequestSeq) return; // superseded while this second fetch was in flight
+      document.getElementById('calibNote').textContent = c.n_resolved === 0
+        ? c.note
+        : `Calibration: ${c.n_resolved} resolved · ${Math.round(c.accuracy*100)}% accuracy · Brier ${c.brier_score} (baseline ${Math.min(c.brier_baseline_5050,c.brier_baseline_up_rate)}) — ${c.note}`;
+      accuracyForFooter = c.accuracy;
+      nResolvedForFooter = c.n_resolved || 0;
+    }
+    document.getElementById('predSignalFooter').innerHTML = renderSignalFooter(headlinePUp, accuracyForFooter, nResolvedForFooter);
+  }catch(e){
+    empty.innerHTML = `<p class="text-sm text-[#BAC9CD]">Could not reach the model.</p>`;
+  }
+}
+
+// Called from renderNav() via loadDashboardIfNeeded() when the Dashboard
+// view is actually the one on screen, not unconditionally at parse time.
+
+// ---- Price vs predictions chart ----
+const RANGES = [
+  { key: '1D', label: '1D', ms: 24*60*60*1000 },
+  { key: '1W', label: '1W', ms: 7*24*60*60*1000 },
+  { key: '1M', label: '1M', ms: 30*24*60*60*1000 },
+  { key: 'ALL', label: 'ALL', ms: Infinity },
+];
+let chartRaw = { prices: [], predictions: [] };
+let chartInstance = null;
+let activeRange = '1M';
+
+function buildRangeTabs(){
+  const host = document.getElementById('rangeTabs');
+  host.innerHTML = RANGES.map(r =>
+    `<button data-range="${r.key}" class="range-tab px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${r.key===activeRange ? 'bg-[#00E0FF] text-[#0B0E11]' : 'text-[#BAC9CD] hover:text-[#E1E2E7]'}">${r.label}</button>`
+  ).join('');
+  host.querySelectorAll('.range-tab').forEach(btn => {
+    btn.onclick = () => { activeRange = btn.dataset.range; buildRangeTabs(); renderChart(); };
+  });
+}
+
+function confidenceAlpha(p_up){
+  return 0.28 + 0.72 * Math.abs(p_up - 0.5) * 2;
+}
+
+// Shared trend-strength gauge: -1 (strong downtrend) to +1 (strong uptrend).
+// Rainbow bar + marker, same visual idiom as the gauges elsewhere in the
+// CryptoPulse ecosystem (Sentiment/Technical/9 Magnificent in V1) — first
+// time this pattern appears in V2. Guardrail-only signal, not a forecast.
+function trendLabel(t){
+  if(t >= 0.5) return 'strong uptrend';
+  if(t >= 0.15) return 'uptrend';
+  if(t > -0.15) return 'flat / no clear trend';
+  if(t > -0.5) return 'downtrend';
+  return 'strong downtrend';
+}
+function renderTrendBar(trend){
+  if(trend == null) return '';
+  const t = Math.max(-1, Math.min(1, trend));
+  const pos = ((t + 1) / 2) * 100;
+  const dotColor = t >= 0.15 ? '#4AE176' : t <= -0.15 ? '#FFB4AB' : '#BAC9CD';
+  return `
+    <div class="mt-3">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold">Trend strength</span>
+        <span class="text-[10px] font-mono-data" style="color:${dotColor}">${trendLabel(t)} (${t>0?'+':''}${t.toFixed(2)})</span>
+      </div>
+      <div class="relative h-1.5 rounded-full" style="background:linear-gradient(90deg,#FFB4AB,#BAC9CD,#4AE176)">
+        <div class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2" style="left:calc(${pos}% - 6px); background:${dotColor}; border-color:#191C1F"></div>
+      </div>
+    </div>`;
+}
+// Only surfaced once it actually diverges from the raw read by >=1pt —
+// before real calibration data exists it's identical to raw p_up (see
+// applyCalibratedProbability's fallback), so showing it unconditionally
+// would just be noise.
+function calibBadge(rawPUp, calibratedPUp){
+  if(calibratedPUp == null) return '';
+  const diff = Math.round(calibratedPUp * 100) - Math.round(rawPUp * 100);
+  if(Math.abs(diff) < 1) return '';
+  return `<span class="text-xs text-[#DDB7FF] font-mono-data ml-2" title="Empirically recalibrated from resolved prediction history">calibrated ${Math.round(calibratedPUp*100)}%</span>`; /* secondary/purple: distinct from primary cyan brand reads, meta-info tone */
+}
+
+// Precision ring + direction pill + confidence segments — presentation
+// only, built from p_up and calibration accuracy the app already fetches
+// in loadPrediction(). No new data source, no new logic.
+function renderSignalFooter(pUp, accuracy, nResolved){
+  const bullish = pUp >= 0.5;
+  const dirColor = bullish ? '#4AE176' : '#FFB4AB';
+  const dirLabel = bullish ? 'BULLISH SIGNAL' : 'BEARISH SIGNAL';
+  const confidence = Math.abs(pUp - 0.5) * 2; // 0..1, how far from a coin flip
+  const filledSegments = Math.max(1, Math.round(confidence * 4));
+  const segments = [0,1,2,3].map(i =>
+    `<div class="w-4 h-full rounded-full ${i < filledSegments ? '' : 'bg-[#3B494C]'}" ${i < filledSegments ? `style="background:${dirColor}"` : ''}></div>`
+  ).join('');
+
+  const hasAccuracy = nResolved > 0;
+  const pct = hasAccuracy ? Math.round(accuracy * 100) : null;
+  const ringDash = hasAccuracy ? `${pct}, 100` : '0, 100';
+  const ring = `
+    <div class="relative w-10 h-10 flex items-center justify-center shrink-0">
+      <svg class="w-full h-full -rotate-90" viewBox="0 0 36 36">
+        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B494C" stroke-width="3"/>
+        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00E0FF" stroke-width="3" stroke-dasharray="${ringDash}" stroke-linecap="round"/>
+      </svg>
+      <span class="absolute text-[10px] font-mono-data">${hasAccuracy ? pct + '%' : '—'}</span>
+    </div>`;
+
+  return `
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        ${ring}
+        <div class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold leading-tight">Model<br>Precision</div>
+      </div>
+      <div class="flex flex-col items-end gap-1.5">
+        <span class="px-2 py-1 font-mono-data text-[10px] rounded border" style="background:${dirColor}1A; color:${dirColor}; border-color:${dirColor}4D">${dirLabel}</span>
+        <div class="flex gap-1 h-1 w-16">${segments}</div>
+      </div>
+    </div>`;
+}
+
+function renderChart(){
+  const cfg = COIN_CONFIG[currentCoin];
+  const range = RANGES.find(r => r.key === activeRange);
+  const cutoff = range.ms === Infinity ? -Infinity : Date.now() - range.ms;
+  const prices = chartRaw.prices.filter(p => p.ts >= cutoff);
+  const preds = chartRaw.predictions.filter(p => p.ts >= cutoff);
+
+  const priceData = prices.map(p => ({ x: p.ts, y: p[cfg.priceHistField] }));
+  const predData = preds.map(p => ({ x: p.ts, y: p[cfg.predPriceField] }));
+  const pointStyle = preds.map(p => 'triangle');
+  const rotation = preds.map(p => p.p_up >= 0.5 ? 0 : 180);
+  const bg = preds.map(p => {
+    const a = confidenceAlpha(p.p_up).toFixed(2);
+    return p.p_up >= 0.5 ? `rgba(74,225,118,${a})` : `rgba(255,180,171,${a})`;
+  });
+  const border = preds.map(p =>
+    p.realized_up === null || p.realized_up === undefined ? '#4B5563' :
+    p.realized_up === 1 ? '#4AE176' : '#FFB4AB'
+  );
+
+  const nResolved = preds.filter(p => p.realized_up !== null && p.realized_up !== undefined).length;
+  document.getElementById('chartCountNote').textContent =
+    `${preds.length} prediction${preds.length===1?'':'s'} in this range · ${nResolved} resolved`;
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+  gradient.addColorStop(0, 'rgba(138, 147, 166, 0.18)');
+  gradient.addColorStop(1, 'rgba(138, 147, 166, 0.0)');
+
+  const datasets = [
+    {
+      type: 'line',
+      label: cfg.label + ' Price',
+      data: priceData,
+      borderColor: '#BAC9CD',
+      backgroundColor: gradient,
+      fill: true,
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.25,
+    },
+    {
+      type: 'scatter',
+      label: 'Predictions',
+      data: predData,
+      showLine: false,
+      pointStyle,
+      rotation,
+      pointBackgroundColor: bg,
+      pointBorderColor: border,
+      pointBorderWidth: 2.5,
+      pointRadius: 8,
+      pointHoverRadius: 11,
+      pointHitRadius: 14,
+      _preds: preds,
+    },
+  ];
+
+  if(chartInstance){
+    chartInstance.data.datasets = datasets;
+    chartInstance.update();
+    return;
+  }
+
+  chartInstance = new Chart(ctx, {
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: true },
+      scales: {
+        x: { type: 'time', ticks: { color: '#BAC9CD', maxRotation: 0, font: { family: 'monospace', size: 10 } }, grid: { color: 'rgba(59,73,76,0.4)' } },
+        y: { ticks: { color: '#BAC9CD', font: { family: 'monospace', size: 10 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(59,73,76,0.4)' } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#191C1F',
+          borderColor: '#3B494C',
+          borderWidth: 1,
+          titleColor: '#E1E2E7',
+          bodyColor: '#BAC9CD',
+          bodyFont: { family: 'monospace' },
+          padding: 10,
+          callbacks: {
+            label: (item) => {
+              if(item.dataset.label !== 'Predictions') return cfg.label + ' $' + item.parsed.y.toLocaleString();
+              const p = item.dataset._preds[item.dataIndex];
+              const lines = [
+                `Called ${Math.round(p.p_up*100)}% up @ $${p[cfg.predPriceField].toLocaleString()}`,
+                `Median analog move: ${p.median_analog_return>0?'+':''}${p.median_analog_return?.toFixed(2)}%`,
+              ];
+              lines.push(
+                p.realized_up === null || p.realized_up === undefined ? 'Outcome: pending' :
+                `Outcome: ${p.realized_up ? 'correct' : 'wrong'} (${p.realized_return>0?'+':''}${p.realized_return?.toFixed(2)}%)`
+              );
+              return lines;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderRecapTable(){
+  const cfg = COIN_CONFIG[currentCoin];
+  const tbody = document.getElementById('recapTbody');
+  const preds = [...chartRaw.predictions].sort((a,b) => b.ts - a.ts); // newest first, all of them — the scrollable container (not a slice) handles length now
+
+  document.getElementById('recapCountBadge').textContent = preds.length ? `(${preds.length})` : '';
+
+  if(!preds.length){
+    tbody.innerHTML = '<tr><td colspan="4" class="px-2 py-6 text-center text-[#BAC9CD]">No predictions logged yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = preds.map(p => {
+    const date = new Date(p.ts).toUTCString().slice(0,16);
+    const dirArrow = p.p_up >= 0.5 ? '▲' : '▼';
+    const dirColor = p.p_up >= 0.5 ? 'text-[#4AE176]' : 'text-[#FFB4AB]';
+    const predictedCell = `<span class="${dirColor}">${dirArrow} ${Math.round(p.p_up*100)}%</span> <span class="text-[#BAC9CD]">(${p.median_analog_return>0?'+':''}${p.median_analog_return?.toFixed(2)}%)</span>`;
+
+    const resolved = p.realized_up !== null && p.realized_up !== undefined;
+    let realityCell, deviationCell;
+    if(!resolved){
+      const hoursLeft = Math.max(0, Math.round((p.target_ts - Date.now()) / (60*60*1000)));
+      realityCell = `<span class="text-[#BAC9CD]">Pending (~${hoursLeft}h)</span>`;
+      deviationCell = `<span class="text-[#BAC9CD]">—</span>`;
+    }else{
+      const correct = p.realized_up === 1;
+      const realColor = p.realized_return >= 0 ? 'text-[#4AE176]' : 'text-[#FFB4AB]';
+      realityCell = `<span class="${realColor}">${p.realized_return>0?'+':''}${p.realized_return?.toFixed(2)}%</span> ${correct ? '✓' : '✗'}`;
+      const deviation = p.realized_return - p.median_analog_return;
+      const devAbs = Math.abs(deviation);
+      const devColor = devAbs < 1 ? 'text-[#4AE176]' : devAbs < 3 ? 'text-[#FFB020]' : 'text-[#FFB4AB]'; /* KEEP-WARNING-AMBER: 3-tier severity, not brand accent */
+      deviationCell = `<span class="${devColor}">${deviation>0?'+':''}${deviation.toFixed(2)}%</span>`;
+    }
+
+    return `<tr class="border-b border-[#3B494C]/50 font-mono-data">
+      <td class="px-2 py-2 text-[#BAC9CD]">${date}</td>
+      <td class="px-2 py-2 text-right">${predictedCell}</td>
+      <td class="px-2 py-2 text-right">${realityCell}</td>
+      <td class="px-2 py-2 text-right">${deviationCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadChart(){
+  const cfg = COIN_CONFIG[currentCoin];
+  try{
+    const r = await fetch(WORKER_URL + cfg.chart + '?horizon=' + currentHorizon);
+    const d = await r.json();
+    if(d.ok){
+      chartRaw.prices = d.prices;
+      chartRaw.predictions = d.predictions;
+    }
+  }catch(e){
+    document.getElementById('chartCountNote').textContent = 'Could not load chart data.';
+  }
+  buildRangeTabs();
+  renderChart();
+  renderRecapTable();
+}
+
+buildCoinTabs();
+buildHorizonTabs();
+// loadChart() now called from renderNav() via loadDashboardIfNeeded().
+
+// ---- Nav tabs ----
+const NAV = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'lab', label: 'Lab' },
+  { key: 'learning', label: 'AI Learning' },
+];
+let activeView = (location.hash || '').replace('#', '') || 'dashboard';
+if (!NAV.some(n => n.key === activeView)) activeView = 'dashboard';
+
+// ---- Lazy, per-view, per-coin/horizon loading. Previously every one of
+// loadPrediction/loadChart/loadAnalysis/loadChallenger/loadLab fired
+// unconditionally on page load AND on every single coin/horizon toggle
+// click, regardless of which tab (if any) was actually visible --
+// switching BTC->LINK while looking at Dashboard silently reloaded Lab's
+// data too, and vice versa. Now each view's data loads only when that
+// view is the one on screen, and only re-loads if the coin/horizon combo
+// actually changed since the last time it loaded -- tracked by comparing
+// against a "loaded for this key" marker per view, the same pattern
+// already used for AI Learning (_learningLoaded) below. ----
+function comboKey(){ return currentCoin + '-' + currentHorizon; }
+let _dashboardLoadedFor = null;
+let _labLoadedFor = null;
+
+function loadDashboardIfNeeded(){
+  const key = comboKey();
+  if (_dashboardLoadedFor === key) return;
+  _dashboardLoadedFor = key;
+  loadPrediction();
+  loadChart();
+}
+
+function loadLabIfNeeded(){
+  const key = comboKey();
+  if (_labLoadedFor === key) return;
+  _labLoadedFor = key;
+  loadChallenger();
+  loadLab();
+}
+
+function renderNav(){
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    const item = NAV.find(n => n.key === btn.dataset.view);
+    const on = btn.dataset.view === activeView;
+    if(btn.classList.contains('nav-tab-mobile')){
+      // Bottom icon nav: keep the icon+label layout, just recolor.
+      btn.querySelector('span:last-child').textContent = item.label;
+      btn.className = 'nav-tab nav-tab-mobile flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 rounded-xl transition-colors shrink-0 ' + (on ? 'text-[#00E0FF] bg-[#00E0FF]/10' : 'text-[#BAC9CD]');
+    } else {
+      btn.textContent = item.label;
+      btn.className = 'nav-tab px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ' + (on ? 'bg-[#00E0FF] text-[#0B0E11]' : 'text-[#BAC9CD] hover:text-[#E1E2E7]');
+    }
+  });
+  document.getElementById('view-dashboard').classList.toggle('hidden', activeView !== 'dashboard');
+  document.getElementById('view-lab').classList.toggle('hidden', activeView !== 'lab');
+  document.getElementById('view-learning').classList.toggle('hidden', activeView !== 'learning');
+  // Coin/horizon toggle: Dashboard-only now, per explicit request. Lab's
+  // content (Challenger, experiments) is still coin/horizon-scoped and
+  // keeps using whatever combo was last set on Dashboard -- there's just
+  // no way to change it from within Lab itself anymore.
+  document.getElementById('coinHorizonToggle').classList.toggle('hidden', activeView !== 'dashboard');
+  if (activeView === 'dashboard') loadDashboardIfNeeded();
+  if (activeView === 'lab') loadLabIfNeeded();
+  if (activeView === 'learning' && !_learningLoaded) loadLearningOverview();
+}
+
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.onclick = () => { activeView = btn.dataset.view; history.replaceState(null, '', '#' + activeView); renderNav(); };
+});
+renderNav();
+
+// Narrative Analysis (analysisList, BIAS_COLOR, renderAnalysis,
+// loadAnalysis) removed entirely along with its Lab section -- the
+// backend /run-analysis, /run-link-analysis endpoints and the underlying
+// daily cron are untouched and still run, just nothing in this UI
+// displays their output anymore.
+
+// Called from renderNav() via loadLabIfNeeded() when Lab is actually the
+// view on screen (Analysis' content now lives inside Lab).
+
+// The manual "Run Analysis Now" trigger (and its RUN_ANALYSIS_ENDPOINT
+// map) was removed along with its button -- analysis now only runs via
+// the automatic daily cron. The backend endpoints it used to call
+// (/run-analysis, /run-link-analysis) are untouched and still work if a
+// manual trigger is ever needed again from somewhere else.
+
+// Fullscreen chart handler
+let isFullscreen = false;
+document.getElementById('fullscreenBtn').onclick = () => {
+  const section = document.getElementById('chartSection');
+  const container = document.getElementById('chartContainer');
+  isFullscreen = !isFullscreen;
+  if(isFullscreen){
+    section.classList.add('fixed','inset-0','z-50','m-0','rounded-none','overflow-auto');
+    container.style.height = 'calc(100vh - 140px)';
+  }else{
+    section.classList.remove('fixed','inset-0','z-50','m-0','rounded-none','overflow-auto');
+    container.style.height = '280px';
+  }
+  requestAnimationFrame(() => chartInstance && chartInstance.resize());
+};
+
+// Chart-scoped plugin (passed via options.plugins on this one instance, not
+// Chart.register'd globally) — reads each dataset's own borderColor so the
+// glow matches the line instead of one flat color for everything. Still
+// used by the Lab tab's combined-history chart even though the Dashboard
+// chart that originally introduced it is gone.
+const glowLinePlugin = {
+  id: 'glowLine',
+  beforeDatasetDraw(chart, args) {
+    const color = args.meta?.dataset?.options?.borderColor;
+    if(!color) return;
+    chart.ctx.save();
+    chart.ctx.shadowColor = color;
+    chart.ctx.shadowBlur = 14;
+  },
+  afterDatasetDraw(chart) {
+    chart.ctx.restore();
+  },
+};
+
+// renderCalibChart / loadCalibChart / the old bespoke fullscreen handler
+// removed — Calibration Over Time is gone from the Dashboard, consolidated
+// into the Lab tab's combined-history chart (see wireFullscreenToggle /
+// loadLabCombinedHistoryChart for the replacement).
+
+// loadChallenger() and loadLab() moved to the very end of the script — see
+// the closing comment near the bottom of this file for why.
+
+// ---- Offline backtest history table (BTC-only, coin-agnostic UI here
+// since these are always BTC — regime_mag/sentiment/combined tests aren't
+// coin-selectable the way live predictions are) ----
+async function loadBacktestHistory(){
+  const tbody = document.getElementById('backtestTbody');
+  try{
+    const r = await fetch(WORKER_URL + '/backtest-history');
+    const d = await r.json();
+    if(!d.ok || !d.runs || !d.runs.length){
+      tbody.innerHTML = '<tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">No backtests run yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.runs.map(run => {
+      const beats = run.beats_naive_baseline === 1;
+      const beatsCell = run.brier_score == null ? '—' :
+        `<span class="${beats ? 'text-[#4AE176]' : 'text-[#FFB4AB]'}">${beats ? 'Beats' : 'Loses'} (${run.naive_baseline_brier?.toFixed(3) ?? '—'})</span>`;
+      return `<tr class="border-b border-[#3B494C]/50 font-mono-data">
+        <td class="px-2 py-2 text-[#E1E2E7]">${run.coin}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.n_predictions}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.accuracy != null ? (run.accuracy*100).toFixed(1)+'%' : '—'}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.brier_score != null ? run.brier_score.toFixed(3) : '—'}</td>
+        <td class="px-2 py-2 text-right">${beatsCell}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">Could not load backtest history.</td></tr>';
+  }
+}
+loadBacktestHistory();
+
+async function loadRegimeSplitHistory(){
+  const tbody = document.getElementById('regimeSplitTbody');
+  try{
+    const r = await fetch(WORKER_URL + '/backtest-regime-split-history');
+    const d = await r.json();
+    if(!d.ok || !d.runs || !d.runs.length){
+      tbody.innerHTML = '<tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">No regime-split test run yet.</td></tr>';
+      return;
+    }
+    // Only show the most recent run (2 rows: high/low), not every historical run stacked
+    const latestTs = d.runs[0].run_ts;
+    const latest = d.runs.filter(r => r.run_ts === latestTs);
+    tbody.innerHTML = latest.map(run => {
+      const beats = run.beats_naive_baseline === 1;
+      const label = run.split_label === 'high_sentiment' ? `High sentiment (≥${run.median_sentiment_threshold})` : `Low sentiment (<${run.median_sentiment_threshold})`;
+      return `<tr class="border-b border-[#3B494C]/50 font-mono-data">
+        <td class="px-2 py-2 text-[#E1E2E7]">${label}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.n_predictions}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.accuracy != null ? (run.accuracy*100).toFixed(1)+'%' : '—'}</td>
+        <td class="px-2 py-2 text-right text-[#BAC9CD]">${run.brier_score != null ? run.brier_score.toFixed(3) : '—'}</td>
+        <td class="px-2 py-2 text-right"><span class="${beats ? 'text-[#4AE176]' : 'text-[#FFB4AB]'}">${beats ? 'Beats' : 'Loses'} (${run.naive_baseline_brier?.toFixed(3) ?? '—'})</span></td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="5" class="px-2 py-6 text-center text-[#BAC9CD]">Could not load regime-split history.</td></tr>';
+  }
+}
+loadRegimeSplitHistory();
+
+// ---- Challenger view ----
+function loadChallenger(){
+  loadChallengerLive();
+  loadChallengerCalib();
+  loadChallengerRecap();
+}
+
+async function loadChallengerLive(){
+  const host = document.getElementById('challengerLiveBody');
+  if(!host) return;
+  host.innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  try{
+    const r = await fetch(WORKER_URL + '/challenger-recent?limit=30');
+    const d = await r.json();
+    const rows = (d.predictions || []).filter(p => p.coin === currentCoin && p.horizon_hours === currentHorizon);
+    if(!rows.length){
+      host.innerHTML = '<p class="text-xs text-[#BAC9CD]">No challenger predictions logged yet for '+currentCoin+' · '+currentHorizon+'h — starts accumulating on the next 3h cron cycle.</p>';
+      return;
+    }
+    const p = rows[0]; // most recent, already ts DESC from the API
+    const pctFlat = Math.round(p.p_up_flat * 100);
+    const pctTilted = Math.round(p.p_up_tilted * 100);
+    const anomalyBadge = p.is_regime_anomaly
+      ? '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(255,180,171,0.15);color:#FFB4AB">Regime anomaly — trend-persistence mode</span>'
+      : '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(74,225,118,0.15);color:#4AE176">Normal regime — defers to k-NN</span>';
+    const driverLine = p.driver_used
+      ? `<p class="text-xs text-[#BAC9CD] mt-2">Foufi driver applied: <span class="text-[#E1E2E7] font-mono-data">${p.driver_used}</span> (${p.driver_agreement || 'n/a'})</p>`
+      : `<p class="text-xs text-[#BAC9CD] mt-2">No Foufi driver applied this cycle${p.is_regime_anomaly ? ' — none fresh/mapped right now' : ' — not anomalous, driver tilt only applies on anomaly days'}.</p>`;
+    const trailingStr = p.trailing_return_pct != null ? (p.trailing_return_pct > 0 ? '+' : '') + p.trailing_return_pct.toFixed(2) + '%' : '—';
+    host.innerHTML = `
+      ${anomalyBadge}
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div>
+          <p class="text-[10px] uppercase text-[#BAC9CD]">Flat</p>
+          <p class="text-2xl font-bold font-mono-data text-[#00E0FF]">${pctFlat}%</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase text-[#BAC9CD]">Tilted</p>
+          <p class="text-2xl font-bold font-mono-data text-[#00E0FF]">${pctTilted}%</p>
+        </div>
+      </div>
+      <p class="text-xs text-[#BAC9CD] mt-3 font-mono-data">Trailing ${p.horizon_hours}h return: ${trailingStr}</p>
+      ${driverLine}
+      ${renderTrendBar(p.trend_strength)}
+      <p class="text-[10px] text-[#4B5563] mt-2">As of ${new Date(p.ts).toUTCString().slice(0,22)}</p>
+    `;
+  }catch(e){
+    host.innerHTML = '<p class="text-xs text-[#FFB4AB]">Could not load — '+e.message+'</p>';
+  }
+}
+
+async function loadChallengerCalib(){
+  const host = document.getElementById('challengerCalibBody');
+  if(!host) return;
+  host.innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  try{
+    const r = await fetch(WORKER_URL + '/challenger-calibration?coin=' + currentCoin + '&horizon=' + currentHorizon);
+    const d = await r.json();
+    if(!d.ok || (d.n_resolved || 0) < 5){
+      host.innerHTML = `<p class="text-xs text-[#BAC9CD]">Only ${d.n_resolved || 0} resolved challenger prediction${(d.n_resolved||0)===1?'':'s'} so far for ${currentCoin} · ${currentHorizon}h — need at least 5 before this comparison means anything.</p>`;
+      return;
+    }
+    const fmt = v => v == null ? '—' : (v*100).toFixed(1) + '%';
+    const beatBadge = beats => beats == null ? '<span class="text-[#BAC9CD]">n/a</span>' : (beats ? '<span style="color:#4AE176" class="font-semibold">beats</span>' : '<span style="color:#FFB4AB" class="font-semibold">does not beat</span>');
+    host.innerHTML = `
+      <table class="w-full text-xs">
+        <thead><tr class="text-[#BAC9CD] text-left">
+          <th class="py-1 pr-2 font-normal">Metric</th>
+          <th class="py-1 pr-2 font-normal">Flat</th>
+          <th class="py-1 font-normal">Tilted</th>
+        </tr></thead>
+        <tbody>
+          <tr class="border-t border-[#3B494C]"><td class="py-1.5 pr-2 text-[#BAC9CD]">Accuracy</td><td class="py-1.5 pr-2 font-mono-data">${fmt(d.accuracy_flat)}</td><td class="py-1.5 font-mono-data">${fmt(d.accuracy_tilted)}</td></tr>
+          <tr class="border-t border-[#3B494C]"><td class="py-1.5 pr-2 text-[#BAC9CD]">Brier score</td><td class="py-1.5 pr-2 font-mono-data">${d.brier_flat}</td><td class="py-1.5 font-mono-data">${d.brier_tilted}</td></tr>
+          <tr class="border-t border-[#3B494C]"><td class="py-1.5 pr-2 text-[#BAC9CD]">vs. naive (${fmt(d.naive_baseline_accuracy)})</td><td class="py-1.5 pr-2">${beatBadge(d.beats_naive_flat)}</td><td class="py-1.5">${beatBadge(d.beats_naive_tilted)}</td></tr>
+          <tr class="border-t border-[#3B494C]"><td class="py-1.5 pr-2 text-[#BAC9CD]">vs. MA-crossover (${d.ma_crossover_baseline && d.ma_crossover_baseline.accuracy != null ? fmt(d.ma_crossover_baseline.accuracy) : 'n/a'})</td><td class="py-1.5 pr-2">${beatBadge(d.beats_ma_crossover_flat)}</td><td class="py-1.5">${beatBadge(d.beats_ma_crossover_tilted)}</td></tr>
+        </tbody>
+      </table>
+      <p class="text-[10px] text-[#BAC9CD] mt-3 leading-relaxed">n=${d.n_resolved} resolved. Beating naive alone is a low bar; beating MA-crossover is the more meaningful claim. Driver usage: ${d.driver_usage.agree} agree, ${d.driver_usage.disagree} disagree, ${d.driver_usage.uncovered} uncovered (micro), ${d.driver_usage.no_driver_applied} none applied.</p>
+    `;
+  }catch(e){
+    host.innerHTML = '<p class="text-xs text-[#FFB4AB]">Could not load — '+e.message+'</p>';
+  }
+}
+
+async function loadChallengerRecap(){
+  const host = document.getElementById('challengerRecapBody');
+  if(!host) return;
+  host.innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  try{
+    const r = await fetch(WORKER_URL + '/challenger-recent?limit=50');
+    const d = await r.json();
+    const rows = (d.predictions || []).filter(p => p.coin === currentCoin && p.horizon_hours === currentHorizon);
+    if(!rows.length){ host.innerHTML = '<p class="text-xs text-[#BAC9CD]">None yet.</p>'; return; }
+    host.innerHTML = rows.map(p => {
+      const resolved = p.resolved_ts != null;
+      const correct = resolved ? ((p.p_up_flat > 0.5) === (p.realized_up === 1)) : null;
+      const dateStr = new Date(p.ts).toUTCString().slice(0,16);
+      const statusBadge = !resolved
+        ? '<span class="text-[10px] text-[#BAC9CD]">pending</span>'
+        : correct
+          ? '<span class="text-[10px]" style="color:#4AE176">✓ correct</span>'
+          : '<span class="text-[10px]" style="color:#FFB4AB">✗ miss</span>';
+      return `<div class="flex items-center justify-between border-t border-[#3B494C] py-1.5 text-xs">
+        <span class="text-[#BAC9CD] font-mono-data">${dateStr}</span>
+        <span class="font-mono-data">${Math.round(p.p_up_flat*100)}% / ${Math.round(p.p_up_tilted*100)}%</span>
+        ${statusBadge}
+      </div>`;
+    }).join('');
+  }catch(e){
+    host.innerHTML = '<p class="text-xs text-[#FFB4AB]">Could not load — '+e.message+'</p>';
+  }
+}
+
+// Manual refresh — same purpose as V1's header refresh button: force a
+// fresh fetch of everything for the currently selected coin/horizon rather
+// than waiting for the next cron tick or a full page reload.
+document.getElementById('refreshBtn').onclick = async () => {
+  const icon = document.getElementById('refreshIcon');
+  icon.classList.add('spinning');
+  try{
+    // loadDashboardIfNeeded/loadLabIfNeeded (called via refreshAll below)
+    // normally skip reloading when the coin/horizon combo is unchanged --
+    // correct for toggle clicks and tab switches, but an explicit refresh
+    // click should always actually refresh regardless. Resetting these
+    // forces that.
+    _dashboardLoadedFor = null;
+    _labLoadedFor = null;
+    await refreshAll();
+  } finally {
+    icon.classList.remove('spinning');
+  }
+};
+
+// ═══ LAB TAB ═══
+function loadLab(){
+  loadLabWeightingAndHero();
+  loadLabCompareChart();
+  loadLabCombinedHistoryChart();
+  loadSelectedModel();
+  loadLabModelHealth();
+}
+
+// ---- Sections 1+2: combined-accuracy weighting test + hero label test ----
+// Both draw from the same 4 already-existing /calibration calls (BTC/LINK
+// x 12h/24h) — no new endpoints, just fetched together instead of one at
+// a time like the rest of the app does per-view.
+async function fetchAllCalibrations(){
+  const combos = [
+    { coin: 'BTC', horizon: 12, path: COIN_CONFIG.BTC.calib },
+    { coin: 'BTC', horizon: 24, path: COIN_CONFIG.BTC.calib },
+    { coin: 'LINK', horizon: 12, path: COIN_CONFIG.LINK.calib },
+    { coin: 'LINK', horizon: 24, path: COIN_CONFIG.LINK.calib },
+  ];
+  return Promise.all(combos.map(async c => {
+    try{
+      const r = await fetch(WORKER_URL + c.path + '?horizon=' + c.horizon);
+      const d = await r.json();
+      return { coin: c.coin, horizon: c.horizon, accuracy: d.accuracy ?? null, n_resolved: d.n_resolved || 0 };
+    }catch(e){
+      return { coin: c.coin, horizon: c.horizon, accuracy: null, n_resolved: 0 };
+    }
+  }));
+}
+
+function computeCombinedAccuracy(combos){
+  const valid = combos.filter(c => c.accuracy != null && c.n_resolved > 0);
+  if(!valid.length) return { simple: null, pooled: null, totalN: 0 };
+  const simple = valid.reduce((s,c) => s + c.accuracy, 0) / valid.length;
+  const totalN = valid.reduce((s,c) => s + c.n_resolved, 0);
+  const totalCorrect = valid.reduce((s,c) => s + c.accuracy * c.n_resolved, 0);
+  return { simple, pooled: totalN > 0 ? totalCorrect / totalN : null, totalN };
+}
+
+function renderMiniHero(label, pct, upCombos, totalCombos){
+  const bullish = upCombos >= totalCombos / 2;
+  return `
+    <div class="rounded-2xl border border-[#3B494C] bg-[#191C1F] p-5 relative overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-br from-[#00E0FF]/10 via-transparent to-transparent pointer-events-none"></div>
+      <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] font-semibold mb-3">${label}</p>
+      <div class="flex justify-between items-end">
+        <div>
+          <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] mb-1">Combined Accuracy</p>
+          <p class="text-3xl font-bold font-mono-data text-[#BAF2FF] glow-text">${pct!=null ? Math.round(pct*100)+'%' : '—'}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-wide text-[#BAC9CD] mb-1">Direction</p>
+          <p class="text-sm font-mono-data font-semibold" style="color:${bullish ? '#4AE176' : '#FFB4AB'}">${bullish ? 'BULLISH' : 'BEARISH'} (${upCombos}/${totalCombos})</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function loadLabWeightingAndHero(){
+  const weightBody = document.getElementById('labWeightingBody');
+  const heroBody = document.getElementById('labHeroBody');
+  if(!weightBody || !heroBody) return;
+  weightBody.innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  try{
+    const [combos, predResults] = await Promise.all([
+      fetchAllCalibrations(),
+      Promise.all([
+        fetch(WORKER_URL + COIN_CONFIG.BTC.predict + '?horizon=12').then(r=>r.json()).catch(()=>null),
+        fetch(WORKER_URL + COIN_CONFIG.BTC.predict + '?horizon=24').then(r=>r.json()).catch(()=>null),
+        fetch(WORKER_URL + COIN_CONFIG.LINK.predict + '?horizon=12').then(r=>r.json()).catch(()=>null),
+        fetch(WORKER_URL + COIN_CONFIG.LINK.predict + '?horizon=24').then(r=>r.json()).catch(()=>null),
+      ]),
+    ]);
+    const { simple, pooled, totalN } = computeCombinedAccuracy(combos);
+    const upCombos = predResults.filter(p => p && p.ok && p.status === 'ok' && p.p_up >= 0.5).length;
+    const totalCombos = predResults.filter(p => p && p.ok && p.status === 'ok').length;
+
+    weightBody.innerHTML = `
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="rounded-xl bg-[#0B0E11] p-3 text-center">
+          <p class="text-[10px] uppercase text-[#BAC9CD] mb-1">Simple average</p>
+          <p class="text-2xl font-bold font-mono-data text-[#00E0FF]">${simple!=null ? Math.round(simple*100)+'%' : '—'}</p>
+        </div>
+        <div class="rounded-xl bg-[#0B0E11] p-3 text-center">
+          <p class="text-[10px] uppercase text-[#BAC9CD] mb-1">Pooled (n-weighted)</p>
+          <p class="text-2xl font-bold font-mono-data text-[#DDB7FF]">${pooled!=null ? Math.round(pooled*100)+'%' : '—'}</p>
+        </div>
+      </div>
+      <table class="w-full text-xs font-mono-data">
+        <thead><tr class="text-[#BAC9CD] text-left"><th class="font-normal py-1">Combo</th><th class="font-normal py-1 text-right">Accuracy</th><th class="font-normal py-1 text-right">n</th></tr></thead>
+        <tbody>${combos.map(c => `<tr class="border-t border-[#3B494C]/50">
+          <td class="py-1">${c.coin} ${c.horizon}h</td>
+          <td class="py-1 text-right">${c.accuracy!=null ? Math.round(c.accuracy*100)+'%' : '—'}</td>
+          <td class="py-1 text-right text-[#BAC9CD]">${c.n_resolved}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <p class="text-[10px] text-[#BAC9CD] mt-2">${totalN} total resolved predictions across all 4 combos.</p>`;
+
+    heroBody.innerHTML =
+      renderMiniHero('MODEL READ', pooled, upCombos, totalCombos) +
+      renderMiniHero('COMBINED SIGNAL', pooled, upCombos, totalCombos);
+  }catch(e){
+    weightBody.innerHTML = '<p class="text-xs text-[#FFB4AB]">Could not load — '+e.message+'</p>';
+  }
+}
+
+// ---- Section 3: Challenger vs. every other model (bar chart) ----
+// Uses the currently selected coin/horizon, same as every other tab.
+let labCompareChartInstance = null;
+async function loadLabCompareChart(){
+  const cfg = COIN_CONFIG[currentCoin];
+  const countNote = document.getElementById('labCompareCountNote');
+  document.getElementById('labCompareCoinLabel').textContent = `${currentCoin} · ${currentHorizon}h`;
+  if(!countNote) return;
+  wireFullscreenToggle('labCompareFullscreenBtn', 'labCompareCard', 'labCompareChartContainer', () => labCompareChartInstance, '260px');
+  try{
+    const [core, challenger, knnHistory, challengerHistory] = await Promise.all([
+      fetch(WORKER_URL + cfg.calib + '?horizon=' + currentHorizon).then(r=>r.json()),
+      fetch(WORKER_URL + '/challenger-calibration?coin=' + currentCoin + '&horizon=' + currentHorizon).then(r=>r.json()),
+      // Calibrated variants' overall accuracy isn't on the snapshot
+      // endpoints above yet — reusing the -history endpoints' own latest
+      // point instead of adding a new backend computation, since that
+      // data's already being fetched elsewhere in this same tab.
+      fetch(WORKER_URL + cfg.calibHistory + '?horizon=' + currentHorizon).then(r=>r.json()).catch(()=>null),
+      fetch(WORKER_URL + '/challenger-calibration-history?coin=' + currentCoin + '&horizon=' + currentHorizon).then(r=>r.json()).catch(()=>null),
+    ]);
+    const bars = [];
+    if(core && core.n_resolved > 0){
+      bars.push({ label: 'Original k-NN', acc: core.accuracy, n: core.n_resolved, color: '#00E0FF' });
+      if(core.experimental_vs_original && core.experimental_vs_original.available){
+        bars.push({ label: 'Experimental (adaptive-K)', acc: core.experimental_vs_original.accuracy_experimental, n: core.experimental_vs_original.n_resolved, color: '#BAF2FF' });
+      }
+      const knnLast = knnHistory && knnHistory.points && knnHistory.points.length ? knnHistory.points[knnHistory.points.length-1] : null;
+      if(knnLast && knnLast.accuracy_calibrated != null){
+        bars.push({ label: 'k-NN Calibrated', acc: knnLast.accuracy_calibrated, n: knnLast.n_calibrated, color: '#7DD3FC' });
+      }
+    }
+    if(challenger && challenger.n_resolved > 0){
+      bars.push({ label: 'Challenger Flat', acc: challenger.accuracy_flat, n: challenger.n_resolved, color: '#DDB7FF' });
+      bars.push({ label: 'Challenger Tilted', acc: challenger.accuracy_tilted, n: challenger.n_resolved, color: '#9A6FD1' });
+      const chLast = challengerHistory && challengerHistory.ok && challengerHistory.points && challengerHistory.points.length ? challengerHistory.points[challengerHistory.points.length-1] : null;
+      if(chLast && chLast.accuracy_calibrated_flat != null){
+        bars.push({ label: 'Challenger Calibrated', acc: chLast.accuracy_calibrated_flat, n: chLast.n_calibrated, color: '#C4B5FD' });
+      }
+      bars.push({ label: 'Naive baseline', acc: challenger.naive_baseline_accuracy, n: challenger.n_resolved, color: '#BAC9CD' });
+      if(challenger.ma_crossover_baseline && challenger.ma_crossover_baseline.accuracy != null){
+        bars.push({ label: 'MA-crossover', acc: challenger.ma_crossover_baseline.accuracy, n: challenger.ma_crossover_baseline.n, color: '#8A93A6' });
+      }
+    }
+    if(!bars.length){
+      countNote.textContent = 'Not enough resolved predictions yet for this coin/horizon.';
+      if(labCompareChartInstance){ labCompareChartInstance.destroy(); labCompareChartInstance = null; }
+      return;
+    }
+    const ctx = document.getElementById('labCompareChart').getContext('2d');
+    const data = {
+      labels: bars.map(b => b.label + '\n(n=' + b.n + ')'),
+      datasets: [{
+        data: bars.map(b => Math.round((b.acc||0)*1000)/10),
+        backgroundColor: bars.map(b => b.color + 'CC'),
+        borderColor: bars.map(b => b.color),
+        borderWidth: 1.5,
+        borderRadius: 6,
+      }],
+    };
+    if(labCompareChartInstance){ labCompareChartInstance.data = data; labCompareChartInstance.update(); }
+    else {
+      labCompareChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data,
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#BAC9CD', font: { family: 'monospace', size: 9 } }, grid: { display: false } },
+            y: { min: 0, max: 100, ticks: { color: '#BAC9CD', font: { family: 'monospace', size: 10 }, callback: v => v+'%' }, grid: { color: 'rgba(59,73,76,0.4)' } },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#191C1F', borderColor: '#3B494C', borderWidth: 1,
+              titleColor: '#E1E2E7', bodyColor: '#BAC9CD', bodyFont: { family: 'monospace' },
+              callbacks: { label: (item) => `${item.parsed.y}% accuracy` },
+            },
+          },
+        },
+      });
+    }
+    countNote.textContent = `Sample sizes differ per bar — not a fair race, a snapshot of where each stands right now.`;
+  }catch(e){
+    countNote.textContent = 'Could not load comparison.';
+  }
+}
+
+// ---- Section 4: Challenger precision over time (expanding-window line chart) ----
+// loadLabPrecisionChart removed — consolidated into loadLabCombinedHistoryChart,
+// which now includes Challenger Flat/Tilted/Calibrated alongside the core
+// model on one shared timeline instead of a separate chart.
+
+// ---- Combined multi-model history: Original k-NN, Experimental,
+// Challenger Flat, Challenger Tilted — all on one time axis. Challenger's
+// lines are shorter (started logging later) — that's expected, handled by
+// simply not padding/aligning the series, Chart.js's time axis places each
+// point at its real timestamp regardless of which series has more of them. ----
+let labCombinedHistoryChartInstance = null;
+// ---- Shared fullscreen toggle, one implementation reused by every chart
+// instead of a bespoke handler per chart (the price chart and calibration
+// chart each had their own copy before this — this replaces both call
+// sites too, not just the new ones). ----
+const fullscreenState = {};
+function wireFullscreenToggle(btnId, sectionId, containerId, getChartInstance, normalHeight){
+  const btn = document.getElementById(btnId);
+  if(!btn) return;
+  fullscreenState[sectionId] = false;
+  btn.onclick = () => {
+    const section = document.getElementById(sectionId);
+    const container = document.getElementById(containerId);
+    fullscreenState[sectionId] = !fullscreenState[sectionId];
+    if(fullscreenState[sectionId]){
+      section.classList.add('fixed','inset-0','z-50','m-0','rounded-none','overflow-auto');
+      container.style.height = 'calc(100vh - 140px)';
+    }else{
+      section.classList.remove('fixed','inset-0','z-50','m-0','rounded-none','overflow-auto');
+      container.style.height = normalHeight;
+    }
+    requestAnimationFrame(() => { const inst = getChartInstance(); inst && inst.resize(); });
+  };
+}
+
+// ---- Shared, reusable range-tab builder for Lab charts. Supports
+// multiple INDEPENDENT range states (one per chart, keyed by stateKey) —
+// unlike the single global activeRange the price chart uses, these must
+// never couple to each other or to the price chart's own range. Defaults
+// to ALL: analyzing since V2's actual beginning is the standing
+// expectation now, range tabs are an optional zoom-in from there, not
+// the starting view. ----
+const LAB_RANGES = [
+  { key: '1W', label: '1W', ms: 7*86400000 },
+  { key: '1M', label: '1M', ms: 30*86400000 },
+  { key: '3M', label: '3M', ms: 90*86400000 },
+  { key: 'ALL', label: 'ALL', ms: Infinity },
+];
+const labChartRangeState = {};
+function buildLabRangeTabs(hostId, stateKey, onChange){
+  if(!(stateKey in labChartRangeState)) labChartRangeState[stateKey] = 'ALL';
+  const host = document.getElementById(hostId);
+  if(!host) return;
+  host.innerHTML = LAB_RANGES.map(r =>
+    `<button data-range="${r.key}" class="range-tab px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${r.key===labChartRangeState[stateKey] ? 'bg-[#00E0FF] text-[#0B0E11]' : 'text-[#BAC9CD] hover:text-[#E1E2E7]'}">${r.label}</button>`
+  ).join('');
+  host.querySelectorAll('.range-tab').forEach(btn => {
+    btn.onclick = () => { labChartRangeState[stateKey] = btn.dataset.range; buildLabRangeTabs(hostId, stateKey, onChange); onChange(); };
+  });
+}
+function clipToLabRange(points, tsField, stateKey){
+  const range = labChartRangeState[stateKey] || 'ALL';
+  if(range === 'ALL') return points;
+  const rangeMeta = LAB_RANGES.find(r => r.key === range);
+  const cutoff = Date.now() - rangeMeta.ms;
+  return points.filter(p => p[tsField] >= cutoff);
+}
+
+async function loadLabCombinedHistoryChart(){
+  const cfg = COIN_CONFIG[currentCoin];
+  const countNote = document.getElementById('labCombinedHistoryCountNote');
+  document.getElementById('labCombinedHistoryCoinLabel').textContent = `${currentCoin} · ${currentHorizon}h`;
+  if(!countNote) return;
+  buildLabRangeTabs('labCombinedHistoryRangeTabs', 'combinedHistory', loadLabCombinedHistoryChart);
+  wireFullscreenToggle('labCombinedHistoryFullscreenBtn', 'labCombinedHistoryCard', 'labCombinedHistoryChartContainer', () => labCombinedHistoryChartInstance, '280px');
+  try{
+    const [knnRes, challengerRes] = await Promise.all([
+      fetch(WORKER_URL + cfg.calibHistory + '?horizon=' + currentHorizon).then(r=>r.json()),
+      fetch(WORKER_URL + '/challenger-calibration-history?coin=' + currentCoin + '&horizon=' + currentHorizon).then(r=>r.json()),
+    ]);
+    const knnPointsAll = (knnRes && knnRes.points) || [];
+    const challengerPointsAll = (challengerRes && challengerRes.ok && challengerRes.points) || [];
+    if(!knnPointsAll.length && !challengerPointsAll.length){
+      countNote.textContent = 'No resolved predictions yet for this coin/horizon.';
+      if(labCombinedHistoryChartInstance){ labCombinedHistoryChartInstance.destroy(); labCombinedHistoryChartInstance = null; }
+      return;
+    }
+    // Range clipping applied after fetch, same principle as the price
+    // chart — one full fetch, clip client-side, no re-fetch on tab switch.
+    const knnPoints = clipToLabRange(knnPointsAll, 'ts', 'combinedHistory');
+    const challengerPoints = clipToLabRange(challengerPointsAll, 'ts', 'combinedHistory');
+    const datasets = [];
+    if(knnPoints.length){
+      datasets.push({ label: 'Original k-NN', data: knnPoints.map(p => ({ x: p.ts, y: p.accuracy_original * 100 })), borderColor: '#00E0FF', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.15 });
+      const expPoints = knnPoints.filter(p => p.accuracy_experimental != null);
+      if(expPoints.length){
+        datasets.push({ label: 'Experimental', data: expPoints.map(p => ({ x: p.ts, y: p.accuracy_experimental * 100 })), borderColor: '#BAF2FF', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.15, borderDash: [2,3] });
+      }
+      // Calibrated variant — same "shorter line from its own start, never
+      // padded or excluded" principle as Experimental/Challenger already
+      // follow, now a standing rule rather than something only applied
+      // when it happened to come up.
+      const calPoints = knnPoints.filter(p => p.accuracy_calibrated != null);
+      if(calPoints.length){
+        datasets.push({ label: 'k-NN Calibrated', data: calPoints.map(p => ({ x: p.ts, y: p.accuracy_calibrated * 100 })), borderColor: '#7DD3FC', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.15, borderDash: [1,4] });
+      }
+    }
+    if(challengerPoints.length){
+      datasets.push({ label: 'Challenger Flat', data: challengerPoints.map(p => ({ x: p.ts, y: p.accuracy_flat * 100 })), borderColor: '#DDB7FF', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.15 });
+      datasets.push({ label: 'Challenger Tilted', data: challengerPoints.map(p => ({ x: p.ts, y: p.accuracy_tilted * 100 })), borderColor: '#9A6FD1', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.15, borderDash: [5,3] });
+      const chCalPoints = challengerPoints.filter(p => p.accuracy_calibrated_flat != null);
+      if(chCalPoints.length){
+        datasets.push({ label: 'Challenger Calibrated', data: chCalPoints.map(p => ({ x: p.ts, y: p.accuracy_calibrated_flat * 100 })), borderColor: '#C4B5FD', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.15, borderDash: [1,4] });
+      }
+    }
+    const ctx = document.getElementById('labCombinedHistoryChart').getContext('2d');
+    if(labCombinedHistoryChartInstance){ labCombinedHistoryChartInstance.data.datasets = datasets; labCombinedHistoryChartInstance.update(); }
+    else {
+      labCombinedHistoryChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        plugins: [glowLinePlugin],
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          scales: {
+            x: { type: 'time', ticks: { color: '#BAC9CD', maxRotation: 0, font: { family: 'monospace', size: 10 } }, grid: { color: 'rgba(59,73,76,0.4)' } },
+            y: { min: 0, max: 100, ticks: { color: '#BAC9CD', font: { family: 'monospace', size: 10 }, callback: v => v+'%' }, grid: { color: 'rgba(59,73,76,0.4)' } },
+          },
+          plugins: {
+            legend: { display: true, position: 'top', labels: { color: '#BAC9CD', font: { size: 9 }, boxWidth: 10, usePointStyle: true } },
+            tooltip: {
+              backgroundColor: '#191C1F', borderColor: '#3B494C', borderWidth: 1,
+              titleColor: '#E1E2E7', bodyColor: '#BAC9CD', bodyFont: { family: 'monospace' },
+              callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed.y.toFixed(1)}%` },
+            },
+          },
+        },
+      });
+    }
+    const knnLast = knnPoints[knnPoints.length-1];
+    const chLast = challengerPoints[challengerPoints.length-1];
+    const parts = [];
+    if(knnLast) parts.push(`k-NN n=${knnLast.n_original}`);
+    if(chLast) parts.push(`Challenger n=${chLast.n}`);
+    countNote.textContent = parts.length ? parts.join(' · ') + ' — different sample sizes, expected' : '';
+  }catch(e){
+    countNote.textContent = 'Could not load combined history.';
+  }
+}
+
+// ---- Model Health & Recent Trend — "is it actually improving?" without
+// needing to remember last time's numbers or query D1 by hand. Computed
+// entirely from data the app already fetches elsewhere (calibration-history/
+// challenger-calibration-history) via differencing, not a new endpoint:
+// each point already holds a CUMULATIVE (expanding-window) accuracy, so
+// subtracting one cumulative point from a later one gives the exact
+// accuracy of just the predictions between them -- a clean "recent window"
+// reading with no new backend work. ----
+const MODEL_HEALTH_RECENT_N = 40;
+
+function computeRecentVsPrior(points, nField, accField, recentN){
+  if(!points || !points.length) return null;
+  const last = points[points.length-1];
+  const totalN = last[nField];
+  if(totalN == null || totalN < recentN + 10) return null; // not enough history to split meaningfully
+  const totalCorrect = last[accField] * totalN;
+  const targetN = totalN - recentN;
+  let boundary = points[0];
+  for(const p of points){ if(p[nField] != null && p[nField] <= targetN) boundary = p; else break; }
+  const priorN = boundary[nField] || 0;
+  const priorCorrect = (boundary[accField] || 0) * priorN;
+  const recentActualN = totalN - priorN;
+  const recentCorrect = totalCorrect - priorCorrect;
+  if(recentActualN < 5) return null; // boundary snapping left too few in the "recent" bucket to trust
+  return {
+    overallAcc: last[accField] * 100,
+    overallN: totalN,
+    recentAcc: recentCorrect / recentActualN * 100,
+    recentN: recentActualN,
+    priorAcc: priorN > 0 ? priorCorrect / priorN * 100 : null,
+    priorN: priorN,
+  };
+}
+
+function trendArrow(recentAcc, priorAcc){
+  if(priorAcc == null) return { symbol: '—', color: '#BAC9CD' };
+  const delta = recentAcc - priorAcc;
+  if(Math.abs(delta) < 3) return { symbol: '→', color: '#BAC9CD' }; // within noise, call it flat
+  return delta > 0 ? { symbol: '↑', color: '#4AE176' } : { symbol: '↓', color: '#FFB4AB' };
+}
+
+// ---- Model Health chart — grouped bars, Prior vs Recent, one bar-pair per
+// tracked model variant, scoped to whichever coin/horizon is currently
+// selected (same convention as the other Lab charts). Reuses the exact
+// data loadLabModelHealth already computed for the table below it — no
+// separate fetch, this just visualizes what's already there. ----
+let labModelHealthChartInstance = null;
+function renderModelHealthChart(combo){
+  const canvas = document.getElementById('labModelHealthChart');
+  const coinLabel = document.getElementById('labModelHealthChartCoin');
+  if(!canvas) return;
+  if(coinLabel) coinLabel.textContent = combo ? `${combo.coin} · ${combo.horizon}h` : '';
+
+  const rows = [
+    { label: 'Original k-NN', data: combo?.knn, color: '#00E0FF' },
+    { label: 'k-NN Calibrated', data: combo?.knnCalibrated, color: '#7DD3FC' },
+    { label: 'Challenger Flat', data: combo?.challenger, color: '#DDB7FF' },
+    { label: 'Challenger Calibrated', data: combo?.challengerCalibrated, color: '#C4B5FD' },
+  ].filter(r => r.data); // only chart variants that actually have enough history to show — an absent bar communicates "not enough data yet" better than a fake 0
+
+  if(!rows.length){
+    if(labModelHealthChartInstance){ labModelHealthChartInstance.destroy(); labModelHealthChartInstance = null; }
+    return;
+  }
+
+  const labels = rows.map(r => r.label);
+  const priorData = rows.map(r => r.data.priorAcc != null ? r.data.priorAcc : null);
+  const recentData = rows.map(r => r.data.recentAcc);
+  const barColors = rows.map(r => r.color);
+
+  const ctx = canvas.getContext('2d');
+  const cfg = {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Prior', data: priorData, backgroundColor: barColors.map(c => c + '55'), borderColor: barColors, borderWidth: 1.5 },
+        { label: 'Recent (last ' + MODEL_HEALTH_RECENT_N + ')', data: recentData, backgroundColor: barColors, borderColor: barColors, borderWidth: 1.5 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: '#BAC9CD', font: { size: 9 } }, grid: { display: false } },
+        y: { min: 0, max: 100, ticks: { color: '#BAC9CD', font: { size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(59,73,76,0.4)' } },
+      },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: '#BAC9CD', font: { size: 9 }, boxWidth: 10 } },
+        tooltip: {
+          backgroundColor: '#191C1F', borderColor: '#3B494C', borderWidth: 1,
+          titleColor: '#E1E2E7', bodyColor: '#BAC9CD', bodyFont: { family: 'monospace' },
+          callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y.toFixed(1) + '%' : 'n/a'}` },
+        },
+      },
+    },
+  };
+  if(labModelHealthChartInstance){ labModelHealthChartInstance.data = cfg.data; labModelHealthChartInstance.update(); }
+  else { labModelHealthChartInstance = new Chart(ctx, cfg); }
+}
+
+// ---- Selected Model — the council build's live decision, per coin/horizon.
+// Fetches /selection-history (the log this mechanism writes to), shows the
+// most recent decision plus a short trail of prior ones so a flip is
+// visible, not just the current state. ----
+const SELECTION_VARIANT_LABELS = {
+  original: 'Original k-NN', experimental: 'Experimental (adaptive-K)', calibrated: 'k-NN Calibrated',
+  challenger_flat: 'Challenger Flat', challenger_tilted: 'Challenger Tilted', challenger_calibrated: 'Challenger Calibrated',
+};
+async function loadSelectedModel(){
+  const body = document.getElementById('selectedModelBody');
+  if(!body) return;
+  document.getElementById('selectedModelCoinLabel').textContent = `${currentCoin} · ${currentHorizon}h`;
+  try{
+    const r = await fetch(WORKER_URL + '/selection-history?coin=' + currentCoin + '&horizon=' + currentHorizon + '&limit=5');
+    const d = await r.json();
+    if(!d.ok || !d.decisions || !d.decisions.length){
+      body.innerHTML = `<p class="text-xs text-mutet">No selection decisions logged yet for ${currentCoin} · ${currentHorizon}h — this runs automatically alongside each prediction cycle, check back after the next one.</p>`;
+      return;
+    }
+    const [latest, ...prior] = d.decisions;
+    const label = SELECTION_VARIANT_LABELS[latest.chosen_variant] || latest.chosen_variant;
+    const clearedBadge = latest.cleared_gate
+      ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" style="background:rgba(74,225,118,0.15);color:#4AE176">CLEARED SIGNIFICANCE BAR</span>`
+      : `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" style="background:rgba(186,201,205,0.15);color:#BAC9CD">FALLBACK — bar not cleared</span>`;
+    let html = `<div class="mb-3">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-lg font-bold" style="color:${latest.cleared_gate ? '#4AE176' : '#00E0FF'}">${label}</span>
+        ${clearedBadge}
+      </div>
+      <p class="text-xs text-mutet leading-relaxed">${latest.reason}</p>
+    </div>`;
+    if(prior.length){
+      const allChosen = d.decisions.map(x => x.chosen_variant);
+      const flips = allChosen.slice(0,-1).filter((v,i) => v !== allChosen[i+1]).length;
+      html += `<p class="text-[11px] text-mutet border-t border-[#3B494C] pt-2 mt-2">Last ${d.decisions.length} decisions (${flips} change${flips===1?'':'s'}): ${allChosen.map(v => SELECTION_VARIANT_LABELS[v] || v).join(' → ')}</p>`;
+    }
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = '<p class="text-down text-xs">Could not load selection history.</p>';
+  }
+}
+
+async function loadLabModelHealth(){
+  const body = document.getElementById('labModelHealthBody');
+  if(!body) return;
+  wireFullscreenToggle('labModelHealthFullscreenBtn', 'labModelHealthCard', 'labModelHealthChartContainer', () => labModelHealthChartInstance, '240px');
+  try{
+    const combos = [
+      { coin: 'BTC', horizon: 12 }, { coin: 'BTC', horizon: 24 },
+      { coin: 'LINK', horizon: 12 }, { coin: 'LINK', horizon: 24 },
+      { coin: 'ETH', horizon: 12 }, { coin: 'ETH', horizon: 24 },
+    ];
+    const results = await Promise.all(combos.map(async ({coin, horizon}) => {
+      const cfg = COIN_CONFIG[coin];
+      const [knnRes, chRes] = await Promise.all([
+        fetch(WORKER_URL + cfg.calibHistory + '?horizon=' + horizon).then(r=>r.json()).catch(()=>null),
+        fetch(WORKER_URL + '/challenger-calibration-history?coin=' + coin + '&horizon=' + horizon).then(r=>r.json()).catch(()=>null),
+      ]);
+      const knnPoints = (knnRes && knnRes.points) || [];
+      const chPoints = (chRes && chRes.ok && chRes.points) || [];
+      return {
+        coin, horizon,
+        knn: computeRecentVsPrior(knnPoints, 'n_original', 'accuracy_original', MODEL_HEALTH_RECENT_N),
+        challenger: computeRecentVsPrior(chPoints, 'n', 'accuracy_flat', MODEL_HEALTH_RECENT_N),
+        // New, genuinely adaptive variants (calibrated_p_up / calibrated_p_up_flat)
+        // — see checkCoinCatalysts-adjacent worker.js changes for the full
+        // design. Same computeRecentVsPrior differencing already proven for
+        // the rows above, just pointed at the new accuracy_calibrated /
+        // accuracy_calibrated_flat fields. Will correctly show "not enough
+        // history" for a while — the underlying curve itself needs 20+
+        // resolved rows before it exists at all, on top of the 50 this
+        // function already requires to split recent/prior.
+        knnCalibrated: computeRecentVsPrior(knnPoints, 'n_calibrated', 'accuracy_calibrated', MODEL_HEALTH_RECENT_N),
+        challengerCalibrated: computeRecentVsPrior(chPoints, 'n_calibrated', 'accuracy_calibrated_flat', MODEL_HEALTH_RECENT_N),
+      };
+    }));
+
+    const currentCombo = results.find(r => r.coin === currentCoin && r.horizon === currentHorizon);
+    renderModelHealthChart(currentCombo);
+
+    body.innerHTML = results.map(r => {
+      const rows = [];
+      if(r.knn){
+        const t = trendArrow(r.knn.recentAcc, r.knn.priorAcc);
+        rows.push(`<tr>
+          <td class="py-1 pr-2 text-[#00E0FF] font-semibold">Original k-NN</td>
+          <td class="py-1 pr-2 tnum">${r.knn.overallAcc.toFixed(1)}% (n=${r.knn.overallN})</td>
+          <td class="py-1 pr-2 tnum">${r.knn.recentAcc.toFixed(1)}% (n=${r.knn.recentN})</td>
+          <td class="py-1 pr-2 tnum">${r.knn.priorAcc!=null?r.knn.priorAcc.toFixed(1)+'%':'—'}</td>
+          <td class="py-1 font-bold" style="color:${t.color}">${t.symbol}</td>
+        </tr>`);
+      }
+      if(r.knnCalibrated){
+        const t = trendArrow(r.knnCalibrated.recentAcc, r.knnCalibrated.priorAcc);
+        rows.push(`<tr>
+          <td class="py-1 pr-2 text-[#7DD3FC] font-semibold">↳ Calibrated</td>
+          <td class="py-1 pr-2 tnum">${r.knnCalibrated.overallAcc.toFixed(1)}% (n=${r.knnCalibrated.overallN})</td>
+          <td class="py-1 pr-2 tnum">${r.knnCalibrated.recentAcc.toFixed(1)}% (n=${r.knnCalibrated.recentN})</td>
+          <td class="py-1 pr-2 tnum">${r.knnCalibrated.priorAcc!=null?r.knnCalibrated.priorAcc.toFixed(1)+'%':'—'}</td>
+          <td class="py-1 font-bold" style="color:${t.color}">${t.symbol}</td>
+        </tr>`);
+      }
+      if(r.challenger){
+        const t = trendArrow(r.challenger.recentAcc, r.challenger.priorAcc);
+        rows.push(`<tr>
+          <td class="py-1 pr-2 text-[#DDB7FF] font-semibold">Challenger Flat</td>
+          <td class="py-1 pr-2 tnum">${r.challenger.overallAcc.toFixed(1)}% (n=${r.challenger.overallN})</td>
+          <td class="py-1 pr-2 tnum">${r.challenger.recentAcc.toFixed(1)}% (n=${r.challenger.recentN})</td>
+          <td class="py-1 pr-2 tnum">${r.challenger.priorAcc!=null?r.challenger.priorAcc.toFixed(1)+'%':'—'}</td>
+          <td class="py-1 font-bold" style="color:${t.color}">${t.symbol}</td>
+        </tr>`);
+      }
+      if(r.challengerCalibrated){
+        const t = trendArrow(r.challengerCalibrated.recentAcc, r.challengerCalibrated.priorAcc);
+        rows.push(`<tr>
+          <td class="py-1 pr-2 text-[#C4B5FD] font-semibold">↳ Calibrated</td>
+          <td class="py-1 pr-2 tnum">${r.challengerCalibrated.overallAcc.toFixed(1)}% (n=${r.challengerCalibrated.overallN})</td>
+          <td class="py-1 pr-2 tnum">${r.challengerCalibrated.recentAcc.toFixed(1)}% (n=${r.challengerCalibrated.recentN})</td>
+          <td class="py-1 pr-2 tnum">${r.challengerCalibrated.priorAcc!=null?r.challengerCalibrated.priorAcc.toFixed(1)+'%':'—'}</td>
+          <td class="py-1 font-bold" style="color:${t.color}">${t.symbol}</td>
+        </tr>`);
+      }
+      if(!rows.length){
+        return `<div class="mb-3"><p class="text-xs font-semibold text-[#E1E2E7] mb-1">${r.coin} · ${r.horizon}h</p><p class="text-xs text-[#BAC9CD]">Not enough resolved history yet to split into recent/prior — check back once more predictions have resolved.</p></div>`;
+      }
+      return `<div class="mb-4">
+        <p class="text-xs font-semibold text-[#E1E2E7] mb-1">${r.coin} · ${r.horizon}h</p>
+        <table class="w-full text-[11px]">
+          <thead><tr class="text-[#BAC9CD] text-left">
+            <th class="pb-1 pr-2 font-normal">Model</th>
+            <th class="pb-1 pr-2 font-normal">Overall</th>
+            <th class="pb-1 pr-2 font-normal">Recent (last ${MODEL_HEALTH_RECENT_N})</th>
+            <th class="pb-1 pr-2 font-normal">Prior</th>
+            <th class="pb-1 font-normal">Trend</th>
+          </tr></thead>
+          <tbody>${rows.join('')}</tbody>
+        </table>
+      </div>`;
+    }).join('');
+  }catch(e){
+    body.innerHTML = '<p class="text-[#FFB4AB] text-xs">Could not load model health.</p>';
+  }
+}
+
+// Real bug found and fixed: this used to fire much earlier in the script
+// (right where the old, now-removed calibration chart's boot call lived).
+// wireFullscreenToggle/buildLabRangeTabs reference const fullscreenState/
+// labChartRangeState/LAB_RANGES, which are declared further down the file
+// — a const isn't accessible until the script's execution actually reaches
+// its own declaration line, unlike a function declaration (hoisted, safe
+// regardless of call-site position). Calling loadLab() before the script
+// had reached those declarations threw "Cannot access before
+// initialization" on every chart that used the new shared helpers,
+// silently leaving them stuck on their initial "Loading…" text forever
+// (an unhandled promise rejection inside an async function, not a
+// synchronous throw a nearby try/catch could catch). Confirmed by running
+// the actual deployed file through its own real boot sequence in jsdom —
+// my own earlier tests had all appended test code at the end of the file,
+// which always runs after the whole script has already executed once,
+// masking exactly this class of mid-script ordering bug.
+// ═══════════════════════════════════════════════════════════════════
+// AI LEARNING VIEW
+//
+// Backend reality check, as of this build:
+//   REAL, LIVE, deployed today:      GET /select-variant, GET /selection-history
+//   REAL, code exists, not deployed: GET /api/learning/daily, GET /api/learning/chatgpt
+//     (branch feature/continuous-learning-foundation, PulseWorkerV2 —
+//     expected to 404 against production until that PR merges; handled
+//     as an Unavailable state below, never assumed to work.)
+//   NOT IMPLEMENTED ANYWHERE:        Gemini investigation query endpoint,
+//     per-experiment lifecycle API (EXP-NNN/stages), model_variants and
+//     variant_history tables (don't exist in D1 — confirmed by querying
+//     it directly), any GEMINI/CHATGPT/CLAUDE/HUMAN-attributed audit
+//     entries (selection_decisions rows are always SYSTEM-authored).
+// Every render function below shows an explicit unavailable/empty state
+// for anything in the second and third category — nothing is guessed,
+// and no browser-side recalculation of accuracy/Brier/calibration/
+// eligibility ever happens; those numbers are used exactly as returned.
+//
+// KNOWN OVERLAP, not resolved in this pass: the existing Lab tab's
+// "Selected Model" card (loadSelectedModel(), further up this file) ALSO
+// calls GET /selection-history for the current coin/horizon, independently
+// of Section 4/5/9/10 below. Both fire when Lab has already loaded once
+// (refreshAll()'s existing eager-fetch pattern) and the Learning tab is
+// then opened — a real, minor duplicate fetch this pass didn't
+// consolidate. SELECTION_VARIANT_LABELS (defined with that card) IS
+// reused here for consistent display names, which was a quick, safe win;
+// sharing the actual fetch/cache between the two is a reasonable
+// follow-up, not done here to avoid touching that existing card's code
+// under time pressure.
+// ═══════════════════════════════════════════════════════════════════
+
+const learningApi = {
+  async getDailyOverview(){
+    try{
+      const r = await fetch(WORKER_URL + '/api/learning/daily');
+      if(!r.ok) return { ok:false, unavailable:true };
+      const d = await r.json();
+      if(d.ok === false) return { ok:false, unavailable:true };
+      return { ok:true, data:d };
+    }catch(e){ return { ok:false, unavailable:true }; }
+  },
+  async getChatGptOverview(){
+    try{
+      const r = await fetch(WORKER_URL + '/api/learning/chatgpt');
+      if(!r.ok) return { ok:false, unavailable:true };
+      const d = await r.json();
+      if(d.ok === false) return { ok:false, unavailable:true };
+      return { ok:true, data:d };
+    }catch(e){ return { ok:false, unavailable:true }; }
+  },
+  async getSelection(coin, horizon){
+    try{
+      const r = await fetch(WORKER_URL + '/select-variant?coin=' + coin + '&horizon=' + horizon);
+      if(!r.ok) return { ok:false, unavailable:true };
+      const d = await r.json();
+      if(d.ok === false) return { ok:false, unavailable:true };
+      return { ok:true, data:d };
+    }catch(e){ return { ok:false, unavailable:true }; }
+  },
+  async getSelectionHistory(coin, horizon, limit){
+    try{
+      const r = await fetch(WORKER_URL + '/selection-history?coin=' + coin + '&horizon=' + horizon + '&limit=' + (limit || 20));
+      if(!r.ok) return { ok:false, unavailable:true };
+      const d = await r.json();
+      if(d.ok === false) return { ok:false, unavailable:true };
+      return { ok:true, data:d };
+    }catch(e){ return { ok:false, unavailable:true }; }
+  },
+  // The four below have no dedicated backend endpoint at all yet. Kept as
+  // explicit adapter methods, per the requested shape, so wiring a real
+  // endpoint later is a one-line change here rather than a new
+  // integration — each currently derives from a call above instead of
+  // hitting an invented URL. See the render functions using them for
+  // exactly what's real vs. derived.
+  async getVariants(coin, horizon){ return this.getSelection(coin, horizon); },
+  async getRegimePerformance(){ return this.getDailyOverview(); },
+  async getExperiments(){ return this.getDailyOverview(); },
+  async getEvents(coin, horizon){ return this.getSelectionHistory(coin, horizon, 20); },
+  async getAuditTrail(coin, horizon){ return this.getSelectionHistory(coin, horizon, 20); },
+  async getStatus(){ return null; }, // status grid composes the calls above directly — see renderLearningStatus
+};
+
+let _learningLoaded = false;
+let _learningGlobalCache = null;
+let _learningSelectionCache = {};
+
+const STATUS_COLORS = {
+  Healthy:     { dot: '#4AE176', text: '#4AE176' },
+  Active:      { dot: '#00E0FF', text: '#00E0FF' },
+  Pending:     { dot: '#FFB020', text: '#FFB020' },
+  Awaiting:    { dot: '#FFB020', text: '#FFB020' },
+  Blocked:     { dot: '#FFB4AB', text: '#FFB4AB' },
+  Unavailable: { dot: '#4B5563', text: '#BAC9CD' },
+  Unknown:     { dot: '#4B5563', text: '#BAC9CD' },
+};
+function statusChip(label, status, text, ts, tooltip){
+  const c = STATUS_COLORS[status] || STATUS_COLORS.Unknown;
+  const tsHtml = ts ? `<p class="text-[9px] text-[#4B5563] mt-1 font-mono-data">${new Date(ts).toLocaleString()}</p>` : '';
+  return `<div class="bg-[#0B0E11] border border-[#3B494C] rounded-xl px-3 py-2.5"${tooltip ? ` title="${String(tooltip).replace(/"/g,'&quot;')}"` : ''}>
+    <p class="text-[9px] text-[#4B5563] uppercase tracking-wide mb-1">${label}</p>
+    <div class="flex items-center gap-1.5 mb-1">
+      <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:${c.dot}"></span>
+      <span class="text-[10px] font-semibold" style="color:${c.text}">${status}</span>
+    </div>
+    <p class="text-[10px] text-[#BAC9CD] leading-tight">${text}</p>
+    ${tsHtml}
+  </div>`;
+}
+
+async function loadLearningOverview(){
+  _learningLoaded = true;
+  renderLearningLoop(null, null);
+  renderAiResponsibilities(null, null);
+  // Analyst Relay no longer auto-fetches here -- it does ~15-20 sequential
+  // D1 queries (buildInvestigationContext, per asset) and only matters when
+  // a human is actually about to use it. The "Check for a candidate"
+  // button in its own section triggers loadAnalystRelayPrompt() on demand.
+  const [daily, chatgpt] = await Promise.all([
+    learningApi.getDailyOverview(),
+    learningApi.getChatGptOverview(),
+  ]);
+  _learningGlobalCache = { daily, chatgpt };
+  renderLearningStatus(daily, chatgpt);
+  renderLearningLoop(daily, chatgpt);
+  renderLearningKpis(daily);
+  renderExperiments(daily);
+  renderAiResponsibilities(daily, chatgpt);
+  renderRegimePerformance(daily);
+  loadLearningSelection();
+}
+
+async function loadLearningSelection(){
+  const key = currentCoin + ':' + currentHorizon;
+  document.getElementById('learnSelectionCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
+  document.getElementById('learnEventsCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
+  document.getElementById('learnVariantsCoinLabel').textContent = currentCoin + ' · ' + currentHorizon + 'H';
+  document.getElementById('learnSelectionBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  document.getElementById('learnEventsBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  document.getElementById('learnVariantsBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+  document.getElementById('learnAuditBody').innerHTML = '<p class="text-xs text-[#BAC9CD]">Loading…</p>';
+
+  const [selection, history] = await Promise.all([
+    learningApi.getSelection(currentCoin, currentHorizon),
+    learningApi.getSelectionHistory(currentCoin, currentHorizon, 20),
+  ]);
+  _learningSelectionCache[key] = { selection, history };
+  const cachedDaily = _learningGlobalCache ? _learningGlobalCache.daily : null;
+  const cachedChatgpt = _learningGlobalCache ? _learningGlobalCache.chatgpt : null;
+  renderLearningStatus(cachedDaily, cachedChatgpt);
+  renderLearningLoop(cachedDaily, cachedChatgpt);
+  renderCurrentSelection(selection, history);
+  renderLearningEvents(history);
+  renderVariantComparison(selection);
+  renderLearningAudit(history);
+}
+
+// ---- Section 1: Status grid ----
+function renderLearningStatus(daily, chatgpt){
+  const items = [];
+  const selCache = _learningSelectionCache[currentCoin + ':' + currentHorizon];
+  const sel = selCache && selCache.selection && selCache.selection.ok ? selCache.selection.data : null;
+
+  items.push(sel
+    ? statusChip('Prediction Ledger', 'Active', 'Predictions are being logged', null, 'Inferred from a successful GET /select-variant response.')
+    : statusChip('Prediction Ledger', 'Unknown', 'Not checked yet', null, 'Open Current Selection below to check.'));
+
+  items.push(sel && sel.comparison_count > 0
+    ? statusChip('Outcome Resolution', 'Active', sel.comparison_count + ' variant(s) with resolved outcomes', null, null)
+    : sel
+      ? statusChip('Outcome Resolution', 'Pending', 'No resolved comparisons yet for this coin/horizon', null, null)
+      : statusChip('Outcome Resolution', 'Unknown', 'Not checked yet', null, null));
+
+  if (daily && daily.ok){
+    const s = daily.data.status;
+    items.push(s === 'GREEN'
+      ? statusChip('Learning Engine', 'Healthy', 'Daily report is current', daily.data.generated_at, null)
+      : s === 'YELLOW'
+        ? statusChip('Learning Engine', 'Active', 'Report generated, flagged for review', daily.data.generated_at, null)
+        : statusChip('Learning Engine', 'Blocked', 'Report flags a data/model issue', daily.data.generated_at, null));
+  } else {
+    items.push(statusChip('Learning Engine', 'Unavailable', 'GET /api/learning/daily did not respond', null, 'Code exists on an unmerged branch — expected to 404 until it deploys.'));
+  }
+
+  items.push(chatgpt && chatgpt.ok
+    ? statusChip('ChatGPT Audit', 'Active', 'Audit-ready data package available', chatgpt.data.generated_at, "This is the data prepared FOR ChatGPT's audit, not a conclusion ChatGPT has produced.")
+    : statusChip('ChatGPT Audit', 'Unavailable', 'GET /api/learning/chatgpt did not respond', null, null));
+
+  if (daily && daily.ok){
+    const n = (daily.data.candidate_experiments || []).length;
+    items.push(n > 0
+      ? statusChip('Claude Experiments', 'Active', n + ' candidate experiment(s)', null, null)
+      : statusChip('Claude Experiments', 'Awaiting', 'No candidate experiments identified yet', null, null));
+  } else {
+    items.push(statusChip('Claude Experiments', 'Unavailable', 'Depends on /api/learning/daily', null, null));
+  }
+
+  items.push(statusChip('Validation', 'Unavailable', 'No experiment validation endpoint exists yet', null, null));
+  items.push(statusChip('Production Gate', 'Unavailable', 'Human-gated by design — no live production-state endpoint', null, 'No AI role in this system can write directly to Production.'));
+
+  document.getElementById('learnStatusGrid').innerHTML = items.join('');
+}
+
+// ---- Section 2: Learning Loop (static structure + honest wiring badges) ----
+// Computes each stage's real status from the same daily/chatgpt/sel data
+// renderLearningStatus already uses -- no new backend calls, matching
+// that function's established pattern exactly. 5 of the 10 stages have a
+// genuine live signal available in this frontend's existing data model
+// and are computed for real; the other 5 (Intelligence, Engineering,
+// Validation, Human Approval, Production) have no queryable signal at
+// all -- Analyst Relay is human-relayed rather than continuously
+// automated, engineering activity lives in git history not an API,
+// there's no validation/approval/production-state endpoint. Those stay
+// fixed, but with accurate, explained descriptions instead of silently
+// implying they're being checked when they aren't.
+function computeLearningLoopStages(daily, chatgpt, sel){
+  const dailyOk = daily && daily.ok;
+  const nExp = dailyOk ? (daily.data.candidate_experiments || []).length : 0;
+  return [
+    { label:'Prediction', desc:'What the model predicted', wired: sel ? true : false },
+    { label:'Outcomes', desc:'What actually happened', wired: (sel && sel.comparison_count > 0) ? true : false },
+    { label:'Performance', desc:'How the prediction performed', wired: dailyOk ? (daily.data.status === 'GREEN' ? true : 'partial') : false },
+    { label:'Intelligence', desc:'Market conditions/catalysts via Analyst Relay — human-relayed, real when used, not continuously automated', wired:'partial' },
+    { label:'Audit', desc:'Independent challenge of the interpretation', wired: (chatgpt && chatgpt.ok) ? true : false },
+    { label:'Experiment', desc:'What change should be tested', wired: dailyOk ? (nExp > 0 ? true : 'partial') : false },
+    { label:'Engineering', desc:'What Claude is implementing — tracked via GitHub commits/PRs, no in-app live signal', wired:'partial' },
+    { label:'Validation', desc:'Backtest / OOS / statistical validation — no experiment validation endpoint exists yet', wired:false },
+    { label:'Human Approval', desc:'Production decision — no dedicated approval-tracking endpoint exists', wired:false },
+    { label:'Production', desc:'Current approved model — models are live; no formal approval-gate workflow tracked', wired:'partial' },
+  ];
+}
+function renderLearningLoop(daily, chatgpt){
+  const selCache = _learningSelectionCache[currentCoin + ':' + currentHorizon];
+  const sel = selCache && selCache.selection && selCache.selection.ok ? selCache.selection.data : null;
+  const stages = computeLearningLoopStages(daily, chatgpt, sel);
+  const wiredBadge = (w) => w === true
+    ? '<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#4AE176]/10 text-[#4AE176] border border-[#4AE176]/20 whitespace-nowrap">connected</span>'
+    : w === 'partial'
+      ? '<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#FFB020]/10 text-[#FFB020] border border-[#FFB020]/20 whitespace-nowrap">partial</span>'
+      : '<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#4B5563]/10 text-[#BAC9CD] border border-[#3B494C] whitespace-nowrap">not yet wired</span>';
+  document.getElementById('learnLoop').innerHTML = stages.map((s, i) => `
+    <div class="flex-1 flex flex-col md:flex-row items-stretch gap-1.5">
+      <div class="w-full bg-[#0B0E11] border border-[#3B494C] rounded-xl px-3 py-2.5">
+        <div class="flex items-center justify-between gap-1 mb-1">
+          <span class="text-[9px] font-mono-data text-[#4B5563]">${i+1}</span>
+          ${wiredBadge(s.wired)}
+        </div>
+        <p class="text-[11px] font-semibold text-[#E1E2E7]">${s.label}</p>
+        <p class="text-[9px] text-[#BAC9CD] mt-0.5 leading-tight">${s.desc}</p>
+      </div>
+      ${i < stages.length - 1 ? '<div class="flex items-center justify-center"><span class="material-symbols-outlined text-[16px] text-[#3B494C] rotate-90 md:rotate-0">arrow_forward</span></div>' : ''}
+    </div>
+  `).join('');
+}
+
+// ---- Section 3: KPI snapshot ----
+function kpiCard(label, value, sub){
+  return `<div class="bg-[#0B0E11] border border-[#3B494C] rounded-xl px-3 py-2.5">
+    <p class="text-[9px] text-[#4B5563] uppercase tracking-wide mb-1">${label}</p>
+    <p class="text-lg font-bold font-mono-data ${value === '—' ? 'text-[#4B5563]' : 'text-[#E1E2E7]'}">${value}</p>
+    ${sub ? `<p class="text-[9px] text-[#BAC9CD] mt-0.5">${sub}</p>` : ''}
+  </div>`;
+}
+function renderLearningKpis(daily){
+  if (!daily || !daily.ok){
+    document.getElementById('learnKpiGrid').innerHTML = [
+      'Resolved Predictions','Accuracy','Brier Score','Calibration Error',
+      'Active Experiments','Awaiting Audit','Awaiting Validation','Awaiting Approval'
+    ].map(l => kpiCard(l, '—', 'Not available')).join('');
+    return;
+  }
+  const d = daily.data;
+  const btc = d.overall_performance && d.overall_performance.BTC;
+  const isOk = !!(btc && btc.status === 'ok');
+  const resolvedTotal = ['BTC','LINK','ETH'].reduce((sum, a) =>
+    sum + ((d.dataset_health && d.dataset_health[a] && d.dataset_health[a].resolved_in_period) || 0), 0);
+  const nExp = (d.candidate_experiments || []).length;
+  document.getElementById('learnKpiGrid').innerHTML = [
+    kpiCard('Resolved Predictions', resolvedTotal || '—', resolvedTotal ? 'BTC+LINK+ETH, this period' : 'Not available'),
+    kpiCard('Accuracy (BTC)', isOk ? (btc.accuracy*100).toFixed(1)+'%' : '—', isOk ? 'n=' + btc.n : 'Insufficient sample'),
+    kpiCard('Brier Score (BTC)', isOk ? btc.brier_score.toFixed(4) : '—', isOk ? 'lower is better' : 'Insufficient sample'),
+    kpiCard('Calibration Error (BTC)', isOk && btc.calibration_error != null ? btc.calibration_error.toFixed(4) : '—', 'lower is better'),
+    kpiCard('Active Experiments', String(nExp), null),
+    kpiCard('Awaiting Audit', '—', 'Not available'),
+    kpiCard('Awaiting Validation', '—', 'Not available'),
+    kpiCard('Awaiting Approval', '—', 'Not available'),
+  ].join('');
+}
+
+// ---- Section 4: Current selection (live) ----
+function renderCurrentSelection(selection, history){
+  const el = document.getElementById('learnSelectionBody');
+  if (!selection || !selection.ok){
+    el.innerHTML = `<div class="text-xs text-[#BAC9CD]">
+      <p class="text-[#FFB4AB] font-semibold mb-1">Selection data unavailable</p>
+      <p>GET /select-variant did not respond. Prediction functionality is unaffected — this only affects the learning display.</p>
+    </div>`;
+    return;
+  }
+  const s = selection.data;
+  const gateHtml = s.cleared_gate
+    ? `<span class="text-[#4AE176] font-semibold">CLEARED</span>`
+    : `<span class="text-[#BAC9CD] font-semibold">NOT CLEARED</span>`;
+  const correctedAlpha = s.comparison_count ? (0.05 / s.comparison_count) : null;
+  const bestLca = (s.scores && s.scores.length) ? Math.max(...s.scores.map(x => x.lca)) : null;
+
+  const scoresHtml = (s.scores || []).length ? `
+    <div class="mt-3 overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead><tr class="text-[#4B5563] text-left"><th class="pb-1 pr-3">Variant</th><th class="pb-1 pr-3">p(up)</th><th class="pb-1 pr-3">LCA score</th><th class="pb-1">n matched</th></tr></thead>
+        <tbody>${s.scores.map(sc => `<tr class="border-t border-[#3B494C]/50">
+          <td class="py-1 pr-3 font-semibold ${sc.variant === s.chosen_variant ? 'text-[#00E0FF]' : 'text-[#E1E2E7]'}">${SELECTION_VARIANT_LABELS[sc.variant] || sc.variant}${sc.variant === s.chosen_variant ? ' <span class="text-[8px] px-1 py-0.5 rounded bg-[#00E0FF]/10 border border-[#00E0FF]/30">SELECTED</span>' : ''}</td>
+          <td class="py-1 pr-3 font-mono-data">${(sc.p_up*100).toFixed(1)}%</td>
+          <td class="py-1 pr-3 font-mono-data">${(sc.lca*100).toFixed(1)}%</td>
+          <td class="py-1 font-mono-data">${sc.n_matched}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
+
+  let neighborhoodHtml = '';
+  if (history && history.ok && history.data.decisions && history.data.decisions[0] && history.data.decisions[0].neighborhood_json){
+    let neighbors = [];
+    try { neighbors = JSON.parse(history.data.decisions[0].neighborhood_json); } catch(e){}
+    if (neighbors.length){
+      neighborhoodHtml = `
+      <details class="mt-3">
+        <summary class="text-[11px] text-[#00E0FF] cursor-pointer select-none">Matched neighborhood (k=${s.k_sel || '—'}, z-score normalized Euclidean distance)</summary>
+        <div class="mt-2 max-h-40 overflow-y-auto">
+          <table class="w-full text-[10px]">
+            <thead><tr class="text-[#4B5563] text-left"><th class="pb-1 pr-3">#</th><th class="pb-1 pr-3">Timestamp</th><th class="pb-1">Distance</th></tr></thead>
+            <tbody>${neighbors.map((n,i) => `<tr class="border-t border-[#3B494C]/50"><td class="py-1 pr-3 font-mono-data">${i+1}</td><td class="py-1 pr-3 font-mono-data">${new Date(n.ts).toLocaleString()}</td><td class="py-1 font-mono-data">${n.dist}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <details class="mt-2"><summary class="text-[10px] text-[#4B5563] cursor-pointer select-none">Raw JSON</summary><pre class="text-[9px] text-[#BAC9CD] mt-1 overflow-x-auto">${JSON.stringify(neighbors, null, 2)}</pre></details>
+      </details>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Asset</p><p class="text-sm font-bold">${s.coin || currentCoin}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Selected Variant</p><p class="text-sm font-bold text-[#00E0FF]">${SELECTION_VARIANT_LABELS[s.chosen_variant] || s.chosen_variant}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Gate</p><p class="text-sm">${gateHtml}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Selection Score</p><p class="text-sm font-mono-data">${bestLca != null ? (bestLca*100).toFixed(1)+'%' : '—'}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Corrected Threshold</p><p class="text-sm font-mono-data">${correctedAlpha != null ? '+' + (correctedAlpha*100).toFixed(1) + 'pts' : '—'}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Comparison Count</p><p class="text-sm font-mono-data">${s.comparison_count ?? '—'}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">Eligible Variants</p><p class="text-sm font-mono-data">${(s.scores || []).length}</p></div>
+      <div><p class="text-[9px] text-[#4B5563] uppercase">k (neighborhood)</p><p class="text-sm font-mono-data">${s.k_sel ?? '—'}</p></div>
+    </div>
+    <div class="bg-[#0B0E11] border border-[#3B494C] rounded-xl px-3 py-2.5 mb-2">
+      <p class="text-[9px] text-[#4B5563] uppercase mb-1">Decision Reason</p>
+      <p class="text-xs text-[#BAC9CD] leading-relaxed">${s.reason || '—'}</p>
+    </div>
+    ${scoresHtml}
+    ${neighborhoodHtml}
+  `;
+}
+
+// ---- Section 5: Recent learning events ----
+function renderLearningEvents(history){
+  const el = document.getElementById('learnEventsBody');
+  if (!history || !history.ok){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Learning events unavailable — GET /selection-history did not respond.</p>`;
+    return;
+  }
+  const decisions = history.data.decisions || [];
+  if (!decisions.length){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">No learning events available yet.</p>`;
+    return;
+  }
+  el.innerHTML = decisions.map(d => `
+    <div class="border-b border-[#3B494C]/50 last:border-0 py-2">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-[10px] font-mono-data text-[#4B5563]">${new Date(d.ts).toLocaleString()}</p>
+        <span class="text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap ${d.cleared_gate ? 'bg-[#4AE176]/10 text-[#4AE176] border border-[#4AE176]/20' : 'bg-[#4B5563]/10 text-[#BAC9CD] border border-[#3B494C]'}">${d.cleared_gate ? 'gate cleared' : 'gate not cleared'}</span>
+      </div>
+      <p class="text-xs font-semibold mt-0.5">Selection decision — <span class="text-[#00E0FF]">${SELECTION_VARIANT_LABELS[d.chosen_variant] || d.chosen_variant}</span></p>
+      <p class="text-[11px] text-[#BAC9CD] mt-0.5 leading-relaxed">${d.reason}</p>
+    </div>
+  `).join('');
+}
+
+// ---- Section 6: Experiments ----
+function renderExperiments(daily){
+  const el = document.getElementById('learnExperimentsBody');
+  if (!daily || !daily.ok){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Experiment data unavailable — GET /api/learning/daily did not respond.</p>`;
+    return;
+  }
+  const exps = daily.data.candidate_experiments || [];
+  if (!exps.length){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">No candidate experiments identified yet. Full lifecycle tracking (EXP-NNN, stages, backtest/OOS results) lives in <a href="https://github.com/quiquandon-oss/PulseWorkerV2/tree/feature/continuous-learning-foundation/learning" target="_blank" rel="noopener" class="text-[#00E0FF] underline">PulseWorkerV2's /learning/ directory</a> once something exists there — not yet exposed as an API.</p>`;
+    return;
+  }
+  el.innerHTML = `<div class="space-y-2">${exps.map(e => `
+    <div class="bg-[#0B0E11] border border-[#3B494C] rounded-xl px-3 py-2.5">
+      <p class="text-xs font-semibold text-[#E1E2E7]">${e.observation || e.hypothesis || 'Candidate experiment'}</p>
+      ${e.hypothesis ? `<p class="text-[11px] text-[#BAC9CD] mt-1"><span class="text-[#4B5563]">Hypothesis:</span> ${e.hypothesis}</p>` : ''}
+      ${e.suggested_experiment ? `<p class="text-[11px] text-[#BAC9CD] mt-1"><span class="text-[#4B5563]">Suggested:</span> ${e.suggested_experiment}</p>` : ''}
+      <details class="mt-1"><summary class="text-[9px] text-[#4B5563] cursor-pointer">Raw</summary><pre class="text-[9px] text-[#BAC9CD] mt-1 overflow-x-auto">${JSON.stringify(e, null, 2)}</pre></details>
+    </div>`).join('')}</div>`;
+}
+
+// ---- Section 6.5: Analyst Relay -- the investigation mechanism. Backend
+// never writes this to gemini_investigations, so nothing here can be
+// mistaken for a machine-verified result -- see PulseWorkerV2's
+// recordAnalystRelay for the full reasoning. ----
+let _relayCurrentCandidate = null;
+
+async function loadAnalystRelayPrompt(){
+  const el = document.getElementById('relayContent');
+  el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Checking for a candidate…</p>`;
+  let data;
+  try {
+    const res = await fetch(WORKER_URL + '/analyst-relay/prompt');
+    data = await res.json();
+  } catch (e) {
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Could not reach the Worker to check for a candidate.</p>`;
+    return;
+  }
+  if (!data || !data.ok){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Could not check for a candidate right now.</p>`;
+    return;
+  }
+  if (!data.hasCandidate){
+    _relayCurrentCandidate = null;
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">No candidate clears the priority bar this cycle. Nothing worth relaying right now.</p>`;
+    return;
+  }
+  _relayCurrentCandidate = data;
+  el.innerHTML = `
+    <p class="text-[11px] text-[#BAC9CD] mb-2">Candidate: <span class="font-semibold text-[#E1E2E7]">${data.assets.join(', ')}</span></p>
+
+    <p class="text-[9px] uppercase tracking-wide text-[#00E0A0] font-semibold mb-1">Factual Data</p>
+    <p class="text-[9px] text-[#4B5563] mb-1.5">Real observations only — the same evidence Gemini receives, before any interpretation.</p>
+    <pre id="relayFactualSummary" class="w-full bg-[#0B0E11] border border-[#00E0A0]/30 rounded-xl p-2 text-[10px] text-[#BAC9CD] font-mono mb-3 whitespace-pre-wrap"></pre>
+
+    <p class="text-[9px] uppercase tracking-wide text-[#4B5563] font-semibold mb-1">Prompt to relay</p>
+    <textarea id="relayPromptText" readonly class="w-full h-28 bg-[#0B0E11] border border-[#3B494C] rounded-xl p-2 text-[10px] text-[#BAC9CD] font-mono mb-2" onclick="this.select()"></textarea>
+    <button id="relayCopyBtn" class="w-full bg-[#1A2530] border border-[#3B494C] rounded-xl py-2 text-xs font-semibold mb-3 text-[#E1E2E7]">Copy Prompt</button>
+    <p class="text-[10px] text-[#4B5563] mb-2">Paste the Gemini app's response below:</p>
+    <textarea id="relayResponseInput" placeholder="Paste Gemini's response here…" class="w-full h-28 bg-[#0B0E11] border border-[#3B494C] rounded-xl p-2 text-[10px] text-[#E1E2E7] mb-2"></textarea>
+    <button id="relaySubmitBtn" class="w-full bg-[#00E0FF] text-[#0B0E11] rounded-xl py-2 text-xs font-bold">Submit</button>
+    <div id="relayResult" class="mt-2"></div>
+    <p class="text-[9px] text-[#4B5563] mt-2 font-mono-data">context ${(data.contextHash || '').slice(0, 12)}…</p>
+  `;
+  // Set via textContent, not template-string interpolation, so a prompt
+  // containing backticks/${...}-looking text can never break out of the
+  // template literal above. Applies to both the factual summary and the
+  // prompt -- same reasoning, same risk either way.
+  document.getElementById('relayFactualSummary').textContent = data.factualSummary || '(no factual summary returned)';
+  document.getElementById('relayPromptText').textContent = data.prompt;
+  document.getElementById('relayCopyBtn').onclick = () => {
+    navigator.clipboard.writeText(data.prompt).then(() => {
+      const btn = document.getElementById('relayCopyBtn');
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  };
+  document.getElementById('relaySubmitBtn').onclick = submitAnalystRelay;
+}
+
+async function submitAnalystRelay(){
+  const textarea = document.getElementById('relayResponseInput');
+  const text = textarea.value.trim();
+  const resultEl = document.getElementById('relayResult');
+  if (!text){ resultEl.innerHTML = `<p class="text-[10px] text-[#FFB020]">Paste a response first.</p>`; return; }
+  if (!_relayCurrentCandidate){ resultEl.innerHTML = `<p class="text-[10px] text-[#FFB020]">No candidate loaded — refresh first.</p>`; return; }
+  resultEl.innerHTML = `<p class="text-[10px] text-[#BAC9CD]">Submitting…</p>`;
+  try {
+    const res = await fetch(WORKER_URL + '/analyst-relay/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidateId: _relayCurrentCandidate.candidateId,
+        assets: _relayCurrentCandidate.assets,
+        promptRequestedTs: _relayCurrentCandidate.promptRequestedTs,
+        rawResponseText: text,
+        // Round-tripped so the stored record reflects exactly the
+        // evidence shown above, not a freshly-rebuilt (potentially
+        // drifted) context.
+        context: _relayCurrentCandidate.context,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok){
+      resultEl.innerHTML = `<p class="text-[10px] text-[#FFB020]">Submission failed: ${String(data.error || 'unknown error')}</p>`;
+      return;
+    }
+    const statusColor = data.validationStatus === 'ok' ? '#00E0A0' : (data.validationStatus === 'no_catalyst_found' ? '#BAC9CD' : '#FFB020');
+    resultEl.innerHTML = `<p class="text-[10px]" style="color:${statusColor}">Status: ${data.validationStatus} — ${data.catalystsWritten} catalyst(s) written.</p>
+      <p class="text-[9px] text-[#4B5563] mt-1 font-mono-data">${data.relayId}</p>
+      <p class="text-[9px] text-[#4B5563] mt-0.5">Reported findings, not verified fact — grounding on a relayed response can't be independently confirmed the way a real API response can.</p>`;
+    if (data.validationStatus === 'ok' || data.validationStatus === 'no_catalyst_found'){
+      textarea.value = '';
+      setTimeout(loadAnalystRelayPrompt, 2500); // move on to the next candidate, if any
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<p class="text-[10px] text-[#FFB020]">Submission failed — could not reach the Worker.</p>`;
+  }
+}
+
+// ---- Section 7: AI responsibility cards ----
+function roleCard(icon, name, question, bodyHtml){
+  return `<div class="bg-[#0B0E11] border border-[#3B494C] rounded-xl p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="material-symbols-outlined text-[16px] text-[#00E0FF]">${icon}</span>
+      <p class="text-xs font-bold">${name}</p>
+    </div>
+    <p class="text-[10px] text-[#4B5563] italic mb-2">"${question}"</p>
+    ${bodyHtml}
+  </div>`;
+}
+function renderAiResponsibilities(daily, chatgpt){
+  const geminiBody = `<p class="text-[11px] text-[#BAC9CD]">Market intelligence, catalyst evidence — via the free consumer app only. Paid API grounding was removed; see the Analyst Relay section above for how Gemini's analysis actually reaches this system now.</p>
+    <p class="text-[10px] mt-1 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:#00E0A0"></span><span class="text-[#BAC9CD]">Active, via Analyst Relay</span></p>`;
+
+  const chatgptBody = (chatgpt && chatgpt.ok)
+    ? `<p class="text-[11px] text-[#BAC9CD]">Audit-ready data package generated ${new Date(chatgpt.data.generated_at).toLocaleString()}, status <span class="font-semibold">${chatgpt.data.status}</span>.</p>
+       <p class="text-[10px] text-[#4B5563] mt-1">This is data prepared FOR ChatGPT's audit, not a conclusion ChatGPT has produced — no API exposes ChatGPT's actual assessment.</p>`
+    : `<p class="text-[11px] text-[#BAC9CD]">Independent audit, challenges conclusions.</p>
+       <p class="text-[10px] mt-1 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:#4B5563"></span><span class="text-[#BAC9CD]">Unavailable — GET /api/learning/chatgpt did not respond</span></p>`;
+
+  const claudeBody = (daily && daily.ok)
+    ? (() => { const n = (daily.data.candidate_experiments || []).length;
+        return `<p class="text-[11px] text-[#BAC9CD]">${n > 0 ? n + ' candidate experiment(s) awaiting implementation.' : 'No active experiment implementation right now.'}</p>
+        <p class="text-[10px] text-[#4B5563] mt-1">See <a href="https://github.com/quiquandon-oss/PulseWorkerV2/tree/feature/continuous-learning-foundation/learning/claude_tasks" target="_blank" rel="noopener" class="text-[#00E0FF] underline">claude_tasks/</a> for anything in progress.</p>`; })()
+    : `<p class="text-[11px] text-[#BAC9CD]">Engineering implementation, experiment creation.</p>
+       <p class="text-[10px] mt-1 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:#4B5563"></span><span class="text-[#BAC9CD]">Unavailable</span></p>`;
+
+  const humanBody = `<p class="text-[11px] text-[#BAC9CD]">Sole production authority. No AI role in this system — Gemini, ChatGPT, or Claude — can promote a change to Production.</p>
+    <p class="text-[10px] text-[#FFB020] mt-1.5 font-semibold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">lock</span>Every promotion requires explicit human approval.</p>`;
+
+  // ANALYST (YOU) card removed -- redundant with the Analyst Relay section
+  // directly above this grid, which already explains the same mechanism.
+
+  document.getElementById('learnRolesGrid').innerHTML =
+    roleCard('travel_explore', 'GEMINI', 'What happened?', geminiBody) +
+    roleCard('fact_check', 'CHATGPT', 'What does it mean?', chatgptBody) +
+    roleCard('code', 'CLAUDE', 'What can we test?', claudeBody) +
+    roleCard('shield_person', 'HUMAN', 'Should it reach Production?', humanBody);
+}
+
+// ---- Section 8: Learning by regime ----
+function renderRegimePerformance(daily){
+  const el = document.getElementById('learnRegimeBody');
+  if (!daily || !daily.ok){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Regime data unavailable — GET /api/learning/daily did not respond.</p>`;
+    return;
+  }
+  const regimeByAsset = daily.data.regime_analysis || {};
+  const assets = Object.keys(regimeByAsset);
+  if (!assets.length){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">No regime data returned for this period.</p>`;
+    return;
+  }
+  el.innerHTML = assets.map(asset => {
+    const buckets = regimeByAsset[asset] || {};
+    const bucketKeys = Object.keys(buckets);
+    if (!bucketKeys.length) return '';
+    return `
+    <div class="mb-3 last:mb-0">
+      <p class="text-[11px] font-semibold text-[#E1E2E7] mb-1">${asset}</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-[10px]">
+          <thead><tr class="text-[#4B5563] text-left"><th class="pb-1 pr-3">Regime</th><th class="pb-1 pr-3">n</th><th class="pb-1 pr-3">Accuracy</th><th class="pb-1 pr-3">Brier</th><th class="pb-1">Calibration Err</th></tr></thead>
+          <tbody>${bucketKeys.map(k => {
+            const b = buckets[k];
+            const ok = b && b.status === 'ok';
+            return `<tr class="border-t border-[#3B494C]/50">
+              <td class="py-1 pr-3">${k}</td>
+              <td class="py-1 pr-3 font-mono-data">${b ? b.n : '—'}</td>
+              <td class="py-1 pr-3 font-mono-data">${ok ? (b.accuracy*100).toFixed(1)+'%' : '—'}</td>
+              <td class="py-1 pr-3 font-mono-data">${ok ? b.brier_score.toFixed(3) : '—'}</td>
+              <td class="py-1 font-mono-data">${ok && b.calibration_error != null ? b.calibration_error.toFixed(3) : '—'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---- Section 9: Model variant comparison (reuses the selection fetch) ----
+function renderVariantComparison(selection){
+  const el = document.getElementById('learnVariantsBody');
+  if (!selection || !selection.ok || !selection.data.scores || !selection.data.scores.length){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">${selection && selection.ok ? 'No eligible variants for this coin/horizon yet (each needs 50+ resolved predictions).' : 'Variant data unavailable — GET /select-variant did not respond.'}</p>`;
+    return;
+  }
+  const s = selection.data;
+  el.innerHTML = `<div class="overflow-x-auto">
+    <table class="w-full text-[11px]">
+      <thead><tr class="text-[#4B5563] text-left"><th class="pb-1 pr-3">Variant</th><th class="pb-1 pr-3">Status</th><th class="pb-1 pr-3">p(up)</th><th class="pb-1 pr-3">LCA score</th><th class="pb-1">n matched</th></tr></thead>
+      <tbody>${s.scores.map(sc => {
+        const isSelected = sc.variant === s.chosen_variant;
+        return `<tr class="border-t border-[#3B494C]/50">
+          <td class="py-1.5 pr-3 font-semibold">${SELECTION_VARIANT_LABELS[sc.variant] || sc.variant}</td>
+          <td class="py-1.5 pr-3 whitespace-nowrap">
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-[#00E0FF]/10 text-[#00E0FF] border border-[#00E0FF]/20 mr-1">ELIGIBLE</span>
+            ${isSelected ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-[#4AE176]/10 text-[#4AE176] border border-[#4AE176]/20">SELECTED</span>' : ''}
+          </td>
+          <td class="py-1.5 pr-3 font-mono-data">${(sc.p_up*100).toFixed(1)}%</td>
+          <td class="py-1.5 pr-3 font-mono-data">${(sc.lca*100).toFixed(1)}%</td>
+          <td class="py-1.5 font-mono-data">${sc.n_matched}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+  <p class="text-[10px] text-[#4B5563] mt-2">Only variants with 50+ resolved predictions appear here — the backend doesn't return variants below that bar, so an "active but not-yet-eligible" variant (if one exists) isn't visible in this table.</p>`;
+}
+
+// ---- Section 10: Audit trail (reuses the selection-history fetch) ----
+function toggleLearnAudit(){
+  const body = document.getElementById('learnAuditBody');
+  const chevron = document.getElementById('learnAuditChevron');
+  const btn = document.getElementById('learnAuditToggleBtn');
+  const hidden = body.classList.toggle('hidden');
+  chevron.style.transform = hidden ? '' : 'rotate(180deg)';
+  btn.setAttribute('aria-expanded', String(!hidden));
+}
+function renderLearningAudit(history){
+  const el = document.getElementById('learnAuditBody');
+  if (!history || !history.ok){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">Audit trail unavailable — GET /selection-history did not respond.</p>`;
+    return;
+  }
+  const decisions = history.data.decisions || [];
+  if (!decisions.length){
+    el.innerHTML = `<p class="text-xs text-[#BAC9CD]">No audit entries yet.</p>`;
+    return;
+  }
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full text-[10px]">
+    <thead><tr class="text-[#4B5563] text-left"><th class="pb-1 pr-3">Timestamp</th><th class="pb-1 pr-3">Event</th><th class="pb-1 pr-3">Entity</th><th class="pb-1 pr-3">Actor</th><th class="pb-1 pr-3">New State</th><th class="pb-1">Reason</th></tr></thead>
+    <tbody>${decisions.map(d => `<tr class="border-t border-[#3B494C]/50 align-top">
+      <td class="py-1.5 pr-3 font-mono-data whitespace-nowrap">${new Date(d.ts).toLocaleString()}</td>
+      <td class="py-1.5 pr-3 whitespace-nowrap">Model selection</td>
+      <td class="py-1.5 pr-3 font-mono-data whitespace-nowrap">${d.coin} · ${d.horizon_hours}H</td>
+      <td class="py-1.5 pr-3"><span class="text-[9px] px-1.5 py-0.5 rounded bg-[#4B5563]/10 text-[#BAC9CD] border border-[#3B494C]">SYSTEM</span></td>
+      <td class="py-1.5 pr-3 font-semibold whitespace-nowrap">${SELECTION_VARIANT_LABELS[d.chosen_variant] || d.chosen_variant}</td>
+      <td class="py-1.5 text-[#BAC9CD]">${d.reason}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>
+  <p class="text-[10px] text-[#4B5563] mt-2">Actor is always SYSTEM — these are automated selectBestVariant runs. No GEMINI/CHATGPT/CLAUDE/HUMAN-attributed audit entries exist in the backend yet.</p>`;
+}
+
+document.getElementById('learnRefreshBtn').onclick = () => { _learningGlobalCache = null; loadLearningOverview(); };
+// renderNav() (called above, right after NAV is defined) already triggers
+// loadLearningOverview()/loadDashboardIfNeeded()/loadLabIfNeeded() for
+// whichever view is actually active on page load -- no separate calls
+// needed here. A duplicate unconditional call used to live here
+// (`if (activeView === 'learning') loadLearningOverview();`, with no
+// !_learningLoaded guard) which would have double-fired the Learning
+// tab's load whenever the page opened directly to #learning.
+</script>
+</body>
+</html>
