@@ -1466,7 +1466,12 @@ let currentData = { BTC: null, LINK: null, ETH: null };
 let chartInstances = { BTC: null, LINK: null, ETH: null };
 let miniChartInstances = { BTC: null, LINK: null, ETH: null };
 let labChartInstances = { exp002: null, exp003: null };
-const DASHBOARD_AUTO_REFRESH_MS = 60000;
+// PulseWorkerV2's price/prediction data only changes on its 3-hour cron
+// cadence, and /chart-data (+ siblings) currently do an unbounded full-table
+// read on every call -- a 60s interval here was needlessly hammering D1 read
+// volume for data that can't have changed. 10 minutes still feels live
+// within a browsing session while cutting call volume ~10x.
+const DASHBOARD_AUTO_REFRESH_MS = 600000;
 let chartDays = { BTC: 7, LINK: 7, ETH: 7 };
 let chartLegendsVisible = { BTC: true, LINK: true, ETH: true };
 let activeView = (location.hash || '').replace('#', '') || 'dashboard';

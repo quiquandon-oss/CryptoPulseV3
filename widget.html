@@ -149,7 +149,12 @@ const SELECTION_VARIANT_LABELS = {
   challenger_tilted: 'Challenger Tilted',
   challenger_calibrated: 'Challenger Calibrated'
 };
-const WIDGET_REFRESH_MS = 60000;
+// Same reasoning as the dashboard's DASHBOARD_AUTO_REFRESH_MS: backend data
+// only changes every 3h (cron cadence), and /chart-data does an unbounded
+// full-table read per call -- every installed widget polling every 60s was
+// needlessly driving up D1 read volume. 10 minutes is still fresh enough for
+// a glanceable widget.
+const WIDGET_REFRESH_MS = 600000;
 const FETCH_TIMEOUT_MS = 8000;
 const STORAGE_KEY = 'cryptopulse-widget-coin';
 const CACHE_KEY_PREFIX = 'cryptopulse-widget-cache-';
