@@ -110,6 +110,7 @@
 
   .stale-note { font-size: 0.58rem; color: var(--color-text-muted); text-align: right; padding: 6px 4px 0; }
   .error-note { font-size: 0.7rem; color: var(--color-bearish); padding: 10px; text-align: center; }
+  .direction.unavailable { color: var(--color-text-muted); background: #F0F0F0; font-size: 0.75rem; }
 </style>
 </head>
 <body>
@@ -121,18 +122,22 @@
   <div class="stale-note" id="updatedNote"></div>
 </div>
 
-<script>
-// Self-contained single-coin widget view — same data source/normalization as
-// the main dashboard (index.html), trimmed to what fits a home-screen widget.
-// No external CDN dependencies (no Tailwind, no Chart.js) so it loads fast
-// and reliably inside a third-party "URL as widget" Android app.
+<script type="module">
+// Self-contained single-coin widget view. Data source/normalization/
+// validation is imported directly from api/ (the same adapter index.html
+// uses) -- this file must never re-implement its own fabricated fallback,
+// see V3_ALIGNMENT_AUDIT.md. No external CDN dependencies (no Tailwind, no
+// Chart.js) so it loads fast and reliably inside a third-party "URL as
+// widget" Android app.
 //
 // Coin selection: pass ?coin=BTC|LINK|ETH in the URL to lock a widget
 // instance to one coin (recommended — install a separate widget per coin
 // this way, each pointed at its own URL). Without the param, a small picker
 // is shown and the choice is remembered in localStorage for next load.
-const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
-const COINS = ['BTC', 'LINK', 'ETH'];
+import { fetchChartData, fetchSelectionHistory } from './api/pulseworker.js';
+import { SUPPORTED_COINS as COINS } from './api/validation.js';
+import { labelVariant } from './api/normalize.js';
+
 const COIN_NAMES = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
 const COIN_ICONS = { BTC: '₿', LINK: '🔗', ETH: '⟠' };
 const COIN_COLORS = { BTC: '#F7931A', LINK: '#2A5ADA', ETH: '#627EEA' };
@@ -141,95 +146,58 @@ const COIN_LOGOS = {
   LINK: 'https://cryptologos.cc/logos/chainlink-link-logo.svg',
   ETH: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg'
 };
-const SELECTION_VARIANT_LABELS = {
-  original: 'Original k-NN',
-  experimental: 'Experimental (adaptive-K)',
-  calibrated: 'k-NN Calibrated',
-  challenger_flat: 'Challenger Flat',
-  challenger_tilted: 'Challenger Tilted',
-  challenger_calibrated: 'Challenger Calibrated'
-};
-const WIDGET_REFRESH_MS = 60000;
+// Same reasoning as the dashboard's DASHBOARD_AUTO_REFRESH_MS: backend data
+// only changes every 3h (cron cadence), and /chart-data does an unbounded
+// full-table read per call -- every installed widget polling every 60s was
+// needlessly driving up D1 read volume. 10 minutes is still fresh enough for
+// a glanceable widget.
+const WIDGET_REFRESH_MS = 600000;
 const STORAGE_KEY = 'cryptopulse-widget-coin';
+const CACHE_KEY_PREFIX = 'cryptopulse-widget-cache-';
 
-function normalizePrediction(p) {
-  if (!p) return {};
-  const n = { ...p };
-  const ts = p.ts || p.timestamp || p.time || p.date;
-  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-  const pUp = p.p_up !== undefined && p.p_up !== null ? parseFloat(p.p_up) : null;
-  if (pUp !== null) {
-    n.direction = pUp >= 0.5 ? 'UP' : 'DOWN';
-    n.confidence = Math.round((pUp >= 0.5 ? pUp : 1 - pUp) * 100);
-  } else if (p.direction) {
-    n.direction = String(p.direction).toUpperCase();
-    n.confidence = p.confidence ? Math.round(parseFloat(p.confidence)) : 75;
-  } else {
-    n.direction = 'UP';
-    n.confidence = 70;
-  }
-  const expMove = p.median_analog_return !== undefined ? p.median_analog_return : p.expectedMove;
-  n.expectedMove = expMove != null ? parseFloat(expMove).toFixed(2) : '0.00';
-  if (p.correct !== undefined) {
-    n.correct = Boolean(p.correct);
-  } else if (p.realized_up !== undefined && p.realized_up !== null) {
-    n.correct = (n.direction === 'UP') === (Number(p.realized_up) === 1);
-  }
-  return n;
-}
-
-function normalizeSelection(s) {
-  if (!s) return {};
-  const n = { ...s };
-  const raw = s.chosen_variant || s.selected_variant || s.model_name || 'Original k-NN';
-  n.selected_variant = SELECTION_VARIANT_LABELS[raw] || raw;
-  const ts = s.ts || s.timestamp || s.time;
-  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-  return n;
-}
-
-function normalizePricePoint(p) {
-  if (!p) return {};
-  const n = { ...p };
-  const val = p.price !== undefined ? p.price :
-              p.btc_price !== undefined ? p.btc_price :
-              p.link_price !== undefined ? p.link_price :
-              p.eth_price !== undefined ? p.eth_price :
-              p.close !== undefined ? p.close : 0;
-  n.price = parseFloat(val || 0);
-  const ts = p.ts || p.timestamp || p.time || p.date;
-  n.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-  return n;
-}
-
-async function fetchCoinData(coin) {
-  const endpoint = coin === 'BTC' ? '/chart-data' : coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
-  const res = await fetch(`${API_BASE}${endpoint}?days=7&horizon=24H`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const raw = await res.json();
-  const predictions = (raw.predictions || []).map(normalizePrediction);
-  const prices = (raw.prices || []).map(normalizePricePoint);
-
-  let selections = [];
+// Many Android "website as home-screen widget" apps snapshot the page a
+// fixed short time after load rather than keeping a live JS context running
+// (that would be a battery drain for a widget host) -- if that snapshot
+// lands before the fetch below resolves, the widget freezes on whatever was
+// on screen at that instant. The adapter's own fetchWithTimeout already
+// bounds the request; caching the last successful render covers the rest.
+function paintFromCache(coin) {
   try {
-    const selRes = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=40`);
-    if (selRes.ok) {
-      const rawSel = await selRes.json();
-      const list = Array.isArray(rawSel) ? rawSel : (rawSel.decisions || []);
-      selections = list.map(normalizeSelection);
-    }
-  } catch (e) { /* selection history is a nice-to-have, not required */ }
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + coin);
+    if (!raw) return false;
+    const cached = JSON.parse(raw);
+    if (!cached.html) return false;
+    document.getElementById('widgetCard').innerHTML = cached.html;
+    const ageMin = Math.round((Date.now() - cached.ts) / 60000);
+    document.getElementById('updatedNote').textContent = `Cached ${ageMin < 1 ? 'just now' : ageMin + 'm ago'} — refreshing…`;
+    return true;
+  } catch (e) { return false; }
+}
 
-  const currentModel = selections.length ? selections[selections.length - 1].selected_variant : 'Original k-NN';
+function cacheRender(coin, html) {
+  try { localStorage.setItem(CACHE_KEY_PREFIX + coin, JSON.stringify({ html, ts: Date.now() })); } catch (e) { /* private mode / storage full — non-fatal */ }
+}
+
+// PulseWorkerV2 is the source of truth -- a fetch failure or an empty/
+// invalid response returns { available: false }, never a fabricated card.
+async function fetchCoinData(coin) {
+  const chart = await fetchChartData(coin, 24, { days: 7 });
+  if (!chart.ok) return { coin, available: false, reason: chart.error };
+
+  const selResult = await fetchSelectionHistory(coin, 24, { limit: 40 });
+  const selections = selResult.ok
+    ? selResult.decisions.map(d => ({ ts: d.ts, selected_variant: labelVariant(d.variant) }))
+    : [];
+
+  const currentModel = selections.length ? selections[selections.length - 1].selected_variant : null;
 
   let takeovers = 0, lastModel = null;
   selections.forEach(s => {
-    const m = s.selected_variant || 'Original k-NN';
-    if (lastModel && m !== lastModel) takeovers++;
-    lastModel = m;
+    if (lastModel && s.selected_variant !== lastModel) takeovers++;
+    lastModel = s.selected_variant;
   });
 
-  const resolved = predictions.filter(p => p.correct === true || p.correct === false);
+  const resolved = chart.predictions.filter(p => p.correct === true || p.correct === false);
   const accuracy = resolved.length ? (resolved.filter(p => p.correct).length / resolved.length * 100) : null;
   const recent = resolved.slice(-10), prior = resolved.slice(-20, -10);
   let accuracyTrend = 'neutral';
@@ -240,7 +208,7 @@ async function fetchCoinData(coin) {
     accuracyTrend = diff > 2 ? 'positive' : diff < -2 ? 'negative' : 'neutral';
   }
 
-  return { coin, predictions, prices, currentModel, takeovers, accuracy, accuracyTrend };
+  return { coin, available: true, predictions: chart.predictions, prices: chart.prices, currentModel, takeovers, accuracy, accuracyTrend };
 }
 
 function sparkPath(prices, width, height) {
@@ -256,47 +224,72 @@ function sparkPath(prices, width, height) {
   }).join(' ');
 }
 
+function coinLogoHtml(coin) {
+  return `<span class="coin-icon-fallback">${COIN_ICONS[coin]}</span>
+          <img src="${COIN_LOGOS[coin]}" alt="" class="coin-logo" style="display:none"
+               onload="this.style.display='inline-block'; this.previousElementSibling.style.display='none';"
+               onerror="this.remove();">`;
+}
+
 function renderCard(data) {
   const { coin } = data;
+
+  if (!data.available) {
+    return `
+      <div class="coin-card" data-coin="${coin}">
+        <div class="coin-header">
+          <div class="coin-info">
+            ${coinLogoHtml(coin)}
+            <span class="coin-name">${COIN_NAMES[coin]}</span>
+            <span class="coin-symbol">${coin}</span>
+          </div>
+        </div>
+        <div class="prediction-call">
+          <span class="direction unavailable">DATA UNAVAILABLE</span>
+        </div>
+        <p class="error-note" style="padding:4px 0 0;text-align:left">${data.reason || 'PulseWorkerV2 returned no authoritative data.'}</p>
+      </div>
+    `;
+  }
+
   const lastPred = data.predictions[data.predictions.length - 1];
   const lastPrice = data.prices[data.prices.length - 1];
-  const direction = lastPred?.direction || 'UP';
-  const confidence = lastPred?.confidence ?? '--';
   const formatter = new Intl.NumberFormat('en-US', {
     style: 'currency', currency: 'USD',
     minimumFractionDigits: coin === 'LINK' ? 2 : 0, maximumFractionDigits: coin === 'LINK' ? 2 : 2
   });
-  const priceText = lastPrice ? formatter.format(lastPrice.price) : '$--';
+  const priceText = lastPrice ? formatter.format(lastPrice.price) : '—';
   const trendArrow = data.accuracyTrend === 'positive' ? '↑ Improving' : data.accuracyTrend === 'negative' ? '↓ Declining' : '→ Stable';
-  const expected = lastPred ? parseFloat(lastPred.expectedMove) : 0;
-  const expSign = expected > 0 ? '+' : '';
   const path = sparkPath(data.prices.slice(-30), 320, 34);
+
+  // No prediction for this cycle -- render the price honestly, without a
+  // fabricated directional call (V3_ALIGNMENT_AUDIT.md #1).
+  const callHtml = lastPred
+    ? `<span class="direction ${lastPred.direction === 'UP' ? 'up' : 'down'}">${lastPred.direction === 'UP' ? '▲' : '▼'} ${lastPred.direction === 'UP' ? 'BULLISH' : 'BEARISH'}</span>
+       <span class="confidence">${lastPred.confidence != null ? lastPred.confidence + '%' : '—'}</span>`
+    : `<span class="direction unavailable">PREDICTION NOT AVAILABLE</span>`;
+  const expected = lastPred?.expectedMove;
+  const expSign = expected != null && expected > 0 ? '+' : '';
 
   return `
     <div class="coin-card" data-coin="${coin}">
       <div class="coin-header">
         <div class="coin-info">
-          <span class="coin-icon-fallback">${COIN_ICONS[coin]}</span>
-          <img src="${COIN_LOGOS[coin]}" alt="" class="coin-logo" style="display:none"
-               onload="this.style.display='inline-block'; this.previousElementSibling.style.display='none';"
-               onerror="this.remove();">
+          ${coinLogoHtml(coin)}
           <span class="coin-name">${COIN_NAMES[coin]}</span>
           <span class="coin-symbol">${coin}</span>
         </div>
         <div class="coin-price">${priceText}</div>
       </div>
-      <div class="prediction-call">
-        <span class="direction ${direction === 'UP' ? 'up' : 'down'}">${direction === 'UP' ? '▲' : '▼'} ${direction === 'UP' ? 'BULLISH' : 'BEARISH'}</span>
-        <span class="confidence">${confidence}%</span>
-      </div>
+      <div class="prediction-call">${callHtml}</div>
       <div class="model-info">
-        Active: <span class="model-name">${data.currentModel}</span>
+        Active: <span class="model-name">${data.currentModel || 'DATA UNAVAILABLE'}</span>
         <span class="status-pill ${data.accuracyTrend}">${trendArrow}</span>
       </div>
       <div class="metrics">
-        <div class="metric-item"><span class="metric-label">Accuracy</span> <span class="metric-value">${data.accuracy == null ? '--' : data.accuracy.toFixed(1) + '%'}</span></div>
+        <div class="metric-item"><span class="metric-label">Accuracy</span> <span class="metric-value">${data.accuracy == null ? '—' : data.accuracy.toFixed(1) + '%'}</span></div>
         <div class="metric-item"><span class="metric-label">Takeovers</span> <span class="metric-value">${data.takeovers}</span></div>
-        <div class="metric-item" style="grid-column:1/-1"><span class="metric-label">Expected</span> <span class="metric-value ${expected >= 0 ? 'positive' : 'negative'}">${expSign}${expected.toFixed(2)}%</span></div>
+        <div class="metric-item" style="grid-column:1/-1"><span class="metric-label">Expected</span> <span class="metric-value ${expected != null && expected >= 0 ? 'positive' : expected != null ? 'negative' : ''}">${expected != null ? expSign + expected.toFixed(2) + '%' : '—'}</span></div>
       </div>
       ${path ? `<svg class="spark" viewBox="0 0 320 34" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${COIN_COLORS[coin]}" stroke-width="2.5"/></svg>` : ''}
     </div>
@@ -353,13 +346,21 @@ async function loadWidget() {
   const card = document.getElementById('widgetCard');
   try {
     const data = await fetchCoinData(selectedCoin);
-    card.innerHTML = renderCard(data);
+    const html = renderCard(data);
+    card.innerHTML = html;
+    cacheRender(selectedCoin, html);
     document.getElementById('updatedNote').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   } catch (e) {
-    card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
+    if (!paintFromCache(selectedCoin)) {
+      card.innerHTML = `<p class="error-note">Could not load ${selectedCoin} price (${e.message}). Will retry.</p>`;
+    }
   }
 }
 
+// Paint synchronously from cache first, before the network round-trip even
+// starts — this is what a widget-hosting app's early snapshot will actually
+// see, rather than the bare "Loading…" placeholder.
+paintFromCache(selectedCoin);
 renderPicker();
 loadWidget();
 setInterval(loadWidget, WIDGET_REFRESH_MS);

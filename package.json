@@ -1,0 +1,9 @@
+{
+  "name": "cryptopulse-v3-tests",
+  "private": true,
+  "description": "Test suite only -- index.html/widget.html/widgets.html have no build step and deploy as-is to GitHub Pages. api/*.js are plain ES modules with zero dependencies, importable directly by the browser and by Node's built-in test runner.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
