@@ -147,6 +147,27 @@
   .status-ok { background: #EAFAF1; color: #27AE60; border: 1px solid #A9DFBF; }
   .status-warning { background: #FEF9E7; color: #D68910; border: 1px solid #F9E79F; }
 
+  /* DATA INTEGRITY PANEL */
+  .data-integrity-panel {
+    background: var(--color-card);
+    border-radius: var(--radius-card);
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
+  }
+  .integrity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px 16px;
+  }
+  .integrity-item { display: flex; flex-direction: column; gap: 1px; }
+  .integrity-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); }
+  .integrity-value { font-size: 0.75rem; font-weight: 700; color: var(--color-text); font-family: 'JetBrains Mono', monospace; }
+  .integrity-value.live { color: var(--color-bullish); }
+  .integrity-value.recent { color: #D68910; }
+  .integrity-value.stale, .integrity-value.unavailable { color: var(--color-bearish); }
+
   /* ENHANCED SUMMARY CARDS */
   .summary-grid {
     display: grid;
@@ -238,6 +259,13 @@
   .direction.down {
     color: var(--color-bearish);
     background: #FDEDEC;
+  }
+
+  .direction.unavailable {
+    color: var(--color-text-muted);
+    background: #F0F0F0;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
   }
 
   .confidence {
@@ -960,6 +988,20 @@
             </div>
         </header>
 
+        <!-- DATA INTEGRITY PANEL -- system-health, not model-health. A
+             visually polished dashboard can otherwise imply the prediction
+             engine is running normally even when it has stopped producing
+             fresh selections; this panel exists so that can never be
+             hidden by the UI's own polish. -->
+        <section class="data-integrity-panel" id="dataIntegrityPanel">
+            <div class="integrity-grid" id="integrityGrid">
+                <div class="integrity-item"><span class="integrity-label">Backend</span><span class="integrity-value" id="integrityBackend">—</span></div>
+                <div class="integrity-item"><span class="integrity-label">Latest prediction</span><span class="integrity-value" id="integrityLatestPrediction">—</span></div>
+                <div class="integrity-item"><span class="integrity-label">Latest production selection</span><span class="integrity-value" id="integrityLatestSelection">—</span></div>
+                <div class="integrity-item"><span class="integrity-label">Research endpoints</span><span class="integrity-value" id="integrityResearch">—</span></div>
+            </div>
+        </section>
+
         <!-- SECTION 2: ENHANCED SUMMARY CARDS -->
         <div class="summary-grid">
             <!-- BTC Card -->
@@ -1320,6 +1362,7 @@
         <div class="flex items-center gap-2 flex-wrap">
           <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">EXP-002 · Anomaly Gate</p>
           <span id="exp002Status" class="status-badge status-warning">Loading…</span>
+          <span class="status-badge status-ok" title="Research-only: this experiment reads selection_decisions_anomaly, a table PulseWorkerV2 never uses to choose the production model.">Production impact: NO</span>
         </div>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'exp002Note')">ⓘ Info</button>
       </div>
@@ -1333,6 +1376,7 @@
         <div class="flex items-center gap-2 flex-wrap">
           <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">EXP-003 · Momentum Overlay</p>
           <span id="exp003Status" class="status-badge status-warning">Loading…</span>
+          <span class="status-badge status-ok" title="Research-only: challenger_momentum is deliberately excluded from PulseWorkerV2's SELECTION_VARIANTS, so it can never be chosen as the production model.">Production impact: NO</span>
         </div>
         <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'exp003Note')">ⓘ Info</button>
       </div>
@@ -1407,6 +1451,24 @@
   </button>
 </nav>
 
+<!--
+  Backend contract layer: api/normalize.js, api/validation.js, api/pulseworker.js
+  are the ONLY code that knows PulseWorkerV2's endpoint shapes and field-name
+  quirks. They never fabricate a value the backend didn't provide -- see
+  V3_ALIGNMENT_AUDIT.md. Loaded as a real ES module (so the api/ files stay
+  plain, dependency-free, and independently unit-testable via `node --test`),
+  bridged onto `window.PulseAPI` because the rest of this file is a classic
+  script relying on inline onclick="..." handlers, which module scope would
+  break. Module scripts execute before DOMContentLoaded, so by the time the
+  classic script's DOMContentLoaded handler actually calls into PulseAPI,
+  this bridge has already run.
+-->
+<script type="module">
+  import * as PulseWorker from './api/pulseworker.js';
+  import * as Validation from './api/validation.js';
+  import { labelVariant } from './api/normalize.js';
+  window.PulseAPI = { ...PulseWorker, ...Validation, labelVariant };
+</script>
 <script>
 function toggleNote(btn, noteId){
   const el = document.getElementById(noteId);
@@ -1420,7 +1482,6 @@ function toggleNote(btn, noteId){
 // ============================================================
 
 const VERSION = 'V3';
-const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
 const COINS = ['BTC', 'LINK', 'ETH'];
 const COIN_NAMES = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
 const COIN_ICONS = { BTC: '₿', LINK: '🔗', ETH: '⟠' };
@@ -1440,17 +1501,12 @@ const MODEL_COLORS = {
   'calibrated': '#1ABC9C',
   'challenger_flat': '#F39C12',
   'challenger_tilted': '#E67E22',
-  'challenger_calibrated': '#D35400'
+  'challenger_calibrated': '#D35400',
+  'Production selection unavailable': '#95A5A6'
 };
 
-const SELECTION_VARIANT_LABELS = {
-  original: 'Original k-NN',
-  experimental: 'Experimental (adaptive-K)',
-  calibrated: 'k-NN Calibrated',
-  challenger_flat: 'Challenger Flat',
-  challenger_tilted: 'Challenger Tilted',
-  challenger_calibrated: 'Challenger Calibrated'
-};
+// Variant label mapping now lives in api/normalize.js (PulseAPI.labelVariant)
+// so it's defined once, shared, and unit-tested -- not duplicated here.
 
 const MODEL_ORDER = [
   'Original k-NN',
@@ -1477,230 +1533,45 @@ let chartLegendsVisible = { BTC: true, LINK: true, ETH: true };
 let activeView = (location.hash || '').replace('#', '') || 'dashboard';
 
 // ============================================================
-// 2. FIELD NORMALIZATION HELPERS
+// 2. API INTEGRATION -- PulseWorkerV2 is the source of truth.
 // ============================================================
+// All normalization/validation lives in api/normalize.js + api/validation.js
+// (loaded as PulseAPI, see the module bridge above). This app displays
+// authoritative backend data only: a fetch failure, empty response, or
+// invalid field renders an explicit unavailable state. It NEVER falls back
+// to synthetic/guessed predictions, selections, or model names.
+// See V3_ALIGNMENT_AUDIT.md.
 
-const FIELD_MAPPINGS = {
-  direction: ['direction', 'call_direction'],
-  confidence: ['confidence', 'confidence_score'],
-  expectedMove: ['expectedMove', 'median_analog_return', 'expected_return_pct'],
-  actualMove: ['actualMove', 'real_return_pct', 'actual_return'],
-  correct: ['correct', 'is_correct', 'accuracy_flag'],
-  selected_variant: ['selected_variant', 'chosen_variant', 'model_name'],
-  eligible_variants: ['eligible_variants', 'model_variants', 'candidate_models'],
-  timestamp: ['timestamp', 'ts', 'time', 'date'],
-  price: ['price', 'close', 'value', 'btc_price', 'link_price', 'eth_price']
-};
+let horizonHours = 24; // PulseWorkerV2 supports exactly 12 and 24 -- see the real toggle in section 9.
 
-function normalizePrediction(prediction) {
-  if (!prediction) return {};
-  const normalized = { ...prediction };
-
-  // Timestamp
-  const ts = prediction.ts || prediction.timestamp || prediction.time || prediction.date;
-  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
-  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-
-  // p_up & direction
-  const pUp = prediction.p_up !== undefined && prediction.p_up !== null ? parseFloat(prediction.p_up) : null;
-  if (pUp !== null) {
-    normalized.p_up = pUp;
-    normalized.direction = pUp >= 0.5 ? 'UP' : 'DOWN';
-    normalized.confidence = Math.round((pUp >= 0.5 ? pUp : 1 - pUp) * 100);
-  } else if (prediction.direction) {
-    normalized.direction = String(prediction.direction).toUpperCase();
-    normalized.confidence = prediction.confidence ? Math.round(parseFloat(prediction.confidence)) : 75;
-  } else {
-    normalized.direction = 'UP';
-    normalized.confidence = 70;
+async function fetchCoinData(coin, days = 7, horizon = horizonHours) {
+  const chart = await PulseAPI.fetchChartData(coin, horizon, { days });
+  if (!chart.ok) {
+    return { coin, horizon, available: false, reason: chart.error, fetchedAt: Date.now() };
   }
 
-  // expected move
-  const expMove = prediction.median_analog_return !== undefined ? prediction.median_analog_return : prediction.expectedMove;
-  normalized.expectedMove = expMove != null ? parseFloat(expMove).toFixed(2) : "0.00";
+  const selResult = await PulseAPI.fetchSelectionHistory(coin, horizon, { limit: 100 });
+  // A SelectionDecision from the adapter is { ts, variant, chosen_p_up }.
+  // Re-shaped here (not re-validated -- that already happened in the
+  // adapter) to the field name the rest of this file's chart/legend/
+  // distribution code already expects.
+  const selections = selResult.ok
+    ? selResult.decisions.map(d => ({
+        ts: d.ts,
+        timestamp: new Date(d.ts).toISOString(),
+        selected_variant: PulseAPI.labelVariant(d.variant),
+        chosen_p_up: d.chosen_p_up,
+      }))
+    : [];
+  const selectionAvailable = selResult.ok && selections.length > 0;
 
-  // realized/actual move, once resolved. Stays null (not "0.00") while pending
-  // so callers can tell "resolved at 0%" apart from "not resolved yet".
-  const actual = prediction.real_return_pct ?? prediction.actual_return ?? prediction.realized_return ?? prediction.actualMove;
-  normalized.actualMove = actual != null ? parseFloat(actual).toFixed(2) : null;
-
-  // actual move & correct
-  if (prediction.correct !== undefined) {
-    normalized.correct = Boolean(prediction.correct);
-  } else if (prediction.realized_up !== undefined && prediction.realized_up !== null) {
-    const isUp = normalized.direction === 'UP';
-    const wasUp = Number(prediction.realized_up) === 1;
-    normalized.correct = isUp === wasUp;
-  }
-
-  return normalized;
-}
-
-function normalizeSelection(selection) {
-  if (!selection) return {};
-  const normalized = { ...selection };
-  const rawVariant = selection.chosen_variant || selection.selected_variant || selection.model_name || 'Original k-NN';
-  normalized.selected_variant = SELECTION_VARIANT_LABELS[rawVariant] || rawVariant;
-
-  const ts = selection.ts || selection.timestamp || selection.time;
-  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
-  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-
-  return normalized;
-}
-
-function normalizePricePoint(pricePoint) {
-  if (!pricePoint) return {};
-  const normalized = { ...pricePoint };
-  const priceVal = pricePoint.price !== undefined ? pricePoint.price :
-                   pricePoint.btc_price !== undefined ? pricePoint.btc_price :
-                   pricePoint.link_price !== undefined ? pricePoint.link_price :
-                   pricePoint.eth_price !== undefined ? pricePoint.eth_price :
-                   pricePoint.close !== undefined ? pricePoint.close : 0;
-  normalized.price = parseFloat(priceVal || 0);
-
-  const ts = pricePoint.ts || pricePoint.timestamp || pricePoint.time || pricePoint.date;
-  normalized.timestamp = ts ? (typeof ts === 'number' ? new Date(ts).toISOString() : ts) : new Date().toISOString();
-  normalized.ts = ts ? (typeof ts === 'number' ? ts : new Date(ts).getTime()) : Date.now();
-
-  return normalized;
-}
-
-// ============================================================
-// 3. API INTEGRATION
-// ============================================================
-
-async function fetchCoinData(coin, days = 7) {
-  try {
-    const endpoint = coin === 'BTC' ? '/chart-data' :
-                     coin === 'LINK' ? '/link-chart-data' : '/eth-chart-data';
-    const response = await fetch(`${API_BASE}${endpoint}?days=${days}&horizon=24H`);
-    if (!response.ok) throw new Error(`Failed to fetch ${coin} data (HTTP ${response.status})`);
-    const rawData = await response.json();
-
-    const predictions = (rawData.predictions || []).map(normalizePrediction);
-    const prices = (rawData.prices || []).map(normalizePricePoint);
-
-    let selections = [];
-    let selectionAvailable = false;
-    try {
-      const selResponse = await fetch(`${API_BASE}/selection-history?coin=${coin}&horizon=24H&limit=100`);
-      if (selResponse.ok) {
-        const rawSelections = await selResponse.json();
-        const selList = Array.isArray(rawSelections) ? rawSelections : (rawSelections.decisions || []);
-        if (selList.length > 0) {
-          selections = selList.map(normalizeSelection);
-          selectionAvailable = true;
-        }
-      }
-    } catch (e) {
-      console.warn(`Selection history not available for ${coin}`);
-    }
-
-    if (!selections || selections.length === 0) {
-      selections = generateFallbackSelections(predictions);
-    }
-
-    const currentModel = selections.length > 0
-      ? selections[selections.length - 1].selected_variant
-      : 'Original k-NN';
-
-    const distribution = {};
-    selections.forEach(s => {
-      const model = s.selected_variant || 'Original k-NN';
-      distribution[model] = (distribution[model] || 0) + 1;
-    });
-
-    let takeovers = 0;
-    let lastModel = null;
-    const takeoverEvents = [];
-
-    selections.forEach((s, i) => {
-      const modelLabel = s.selected_variant || 'Original k-NN';
-      if (lastModel && modelLabel !== lastModel) {
-        takeovers++;
-        takeoverEvents.push({
-          date: s.timestamp,
-          from: lastModel,
-          to: modelLabel,
-          index: i
-        });
-      }
-      lastModel = modelLabel;
-    });
-
-    return {
-      coin,
-      predictions,
-      prices,
-      selections,
-      currentModel,
-      distribution,
-      takeovers,
-      takeoverEvents,
-      selectionAvailable
-    };
-  } catch (error) {
-    console.warn(`Error fetching ${coin} data:`, error);
-    return generateMockCoinData(coin);
-  }
-}
-
-function generateFallbackSelections(predictions) {
-  const models = ['Original k-NN', 'Experimental (adaptive-K)', 'Challenger Flat'];
-  return predictions.map((pred, index) => ({
-    timestamp: pred.timestamp || new Date().toISOString(),
-    ts: pred.ts || Date.now(),
-    selected_variant: models[index % models.length],
-    eligible_variants: models
-  }));
-}
-
-function generateMockCoinData(coin) {
-  const now = new Date();
-  const predictions = [];
-  const prices = [];
-  const selections = [];
-  const models = ['Original k-NN', 'Experimental (adaptive-K)', 'k-NN Calibrated', 'Challenger Flat'];
-  let basePrice = coin === 'BTC' ? 64200 : coin === 'LINK' ? 14.80 : 3450;
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const price = basePrice + (Math.random() - 0.48) * basePrice * 0.04;
-    const direction = Math.random() > 0.48 ? 'UP' : 'DOWN';
-    const confidence = 55 + Math.random() * 35;
-    const correct = Math.random() > 0.45;
-    const model = models[Math.floor(Math.random() * models.length)];
-
-    predictions.push(normalizePrediction({
-      ts: date.getTime(),
-      timestamp: date.toISOString(),
-      direction: direction,
-      p_up: direction === 'UP' ? confidence / 100 : (100 - confidence) / 100,
-      confidence: Math.round(confidence),
-      expectedMove: ((Math.random() * 4) - 2).toFixed(2),
-      correct: correct
-    }));
-
-    prices.push(normalizePricePoint({
-      ts: date.getTime(),
-      timestamp: date.toISOString(),
-      price: parseFloat(price.toFixed(2))
-    }));
-
-    selections.push(normalizeSelection({
-      timestamp: date.toISOString(),
-      ts: date.getTime(),
-      selected_variant: model,
-      eligible_variants: models
-    }));
-  }
+  // null (not a guessed model name) when there is genuinely no authoritative
+  // production selection yet -- callers must render "DATA UNAVAILABLE".
+  const currentModel = selections.length > 0 ? selections[selections.length - 1].selected_variant : null;
 
   const distribution = {};
   selections.forEach(s => {
-    const m = s.selected_variant || 'Original k-NN';
-    distribution[m] = (distribution[m] || 0) + 1;
+    distribution[s.selected_variant] = (distribution[s.selected_variant] || 0) + 1;
   });
 
   let takeovers = 0;
@@ -1709,26 +1580,32 @@ function generateMockCoinData(coin) {
   selections.forEach((s, i) => {
     if (lastModel && s.selected_variant !== lastModel) {
       takeovers++;
-      takeoverEvents.push({
-        date: s.timestamp,
-        from: lastModel,
-        to: s.selected_variant,
-        index: i
-      });
+      takeoverEvents.push({ date: s.timestamp, from: lastModel, to: s.selected_variant, index: i });
     }
     lastModel = s.selected_variant;
   });
 
+  const now = Date.now();
+  const latestPredictionTs = chart.predictions.length ? chart.predictions[chart.predictions.length - 1].ts : null;
+  const latestSelectionTs = selections.length ? selections[selections.length - 1].ts : null;
+
   return {
     coin,
-    predictions,
-    prices,
+    horizon,
+    available: true,
+    predictions: chart.predictions,
+    prices: chart.prices,
     selections,
-    currentModel: selections[selections.length - 1]?.selected_variant || 'Original k-NN',
+    currentModel,
     distribution,
     takeovers,
     takeoverEvents,
-    selectionAvailable: false
+    selectionAvailable,
+    latestPredictionTs,
+    latestSelectionTs,
+    predictionFreshness: PulseAPI.getFreshnessState(latestPredictionTs, now),
+    selectionFreshness: PulseAPI.getFreshnessState(latestSelectionTs, now),
+    fetchedAt: now,
   };
 }
 
@@ -1747,15 +1624,21 @@ async function loadAllData() {
 
   const statusEl = document.getElementById('dataStatus');
   if (statusEl) {
-    const usingMock = Object.values(currentData).some(d => !d || !d.selectionAvailable);
-    if (usingMock) {
-      statusEl.textContent = '⚠️ Simulated / partial fallback';
+    const values = Object.values(currentData);
+    const anyUnavailable = values.some(d => !d || !d.available);
+    const anyStale = values.some(d => d?.available && (d.predictionFreshness === 'STALE' || d.selectionFreshness === 'STALE'));
+    if (anyUnavailable) {
+      statusEl.textContent = '⚠ Backend unavailable for one or more coins';
+      statusEl.className = 'status-badge status-warning';
+    } else if (anyStale) {
+      statusEl.textContent = '⚠ Stale data — see freshness below';
       statusEl.className = 'status-badge status-warning';
     } else {
       statusEl.textContent = '✅ Live data';
       statusEl.className = 'status-badge status-ok';
     }
   }
+  renderDataIntegrityPanel();
 
   updateSummaryCards();
   renderMiniCharts();
@@ -1766,6 +1649,60 @@ async function loadAllData() {
   updateChartLegends();
 
   updateTimestamp();
+}
+
+// Updated whenever the Lab tab actually checks a research endpoint (see
+// loadExp002/loadExp003) -- never probed from here, so this panel adds zero
+// extra backend traffic of its own (PulseWorkerV2's D1 quota is a real,
+// finite resource -- see the auto-refresh-interval fix earlier in this
+// project's history).
+let researchEndpointStatus = null; // null = not checked yet this session; true/false once a Lab tab load has run
+
+function setFreshnessValue(elId, freshness, text) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `integrity-value ${freshness.toLowerCase()}`;
+}
+
+function renderDataIntegrityPanel() {
+  const values = COINS.map(c => currentData[c]).filter(Boolean);
+  const anyAvailable = values.some(d => d.available);
+  const backendEl = document.getElementById('integrityBackend');
+  if (backendEl) {
+    backendEl.textContent = anyAvailable ? 'ONLINE' : 'OFFLINE';
+    backendEl.className = `integrity-value ${anyAvailable ? 'live' : 'unavailable'}`;
+  }
+
+  const now = Date.now();
+  const predictionTimestamps = values.filter(d => d.available && d.latestPredictionTs).map(d => d.latestPredictionTs);
+  if (predictionTimestamps.length) {
+    const latest = Math.max(...predictionTimestamps);
+    setFreshnessValue('integrityLatestPrediction', PulseAPI.getFreshnessState(latest, now),
+      `${PulseAPI.getFreshnessState(latest, now)} · ${PulseAPI.formatAge(latest, now)}`);
+  } else {
+    setFreshnessValue('integrityLatestPrediction', 'UNAVAILABLE', 'UNAVAILABLE');
+  }
+
+  const selectionTimestamps = values.filter(d => d.available && d.selectionAvailable && d.latestSelectionTs).map(d => d.latestSelectionTs);
+  if (selectionTimestamps.length) {
+    const latest = Math.max(...selectionTimestamps);
+    setFreshnessValue('integrityLatestSelection', PulseAPI.getFreshnessState(latest, now),
+      `${PulseAPI.getFreshnessState(latest, now)} · ${PulseAPI.formatAge(latest, now)}`);
+  } else {
+    setFreshnessValue('integrityLatestSelection', 'UNAVAILABLE', 'UNAVAILABLE');
+  }
+
+  const researchEl = document.getElementById('integrityResearch');
+  if (researchEl) {
+    if (researchEndpointStatus === null) {
+      researchEl.textContent = 'NOT CHECKED YET';
+      researchEl.className = 'integrity-value recent';
+    } else {
+      researchEl.textContent = researchEndpointStatus ? 'AVAILABLE' : 'UNAVAILABLE';
+      researchEl.className = `integrity-value ${researchEndpointStatus ? 'live' : 'unavailable'}`;
+    }
+  }
 }
 
 function updateTimestamp() {
@@ -1829,10 +1766,39 @@ function calculatePerformanceMetrics(data) {
   };
 }
 
+// Renders the explicit "no authoritative data" state a summary card must
+// show instead of a fabricated price/direction/model -- see
+// V3_ALIGNMENT_AUDIT.md item #3. `reason` is the adapter's own failure
+// description (HTTP status, timeout, etc.), never invented.
+function renderUnavailableSummaryCard(coin, reason) {
+  const c = coin.toLowerCase();
+  const priceEl = document.getElementById(`${c}Price`);
+  if (priceEl) priceEl.textContent = '—';
+
+  const callEl = document.getElementById(`${c}Call`);
+  if (callEl) callEl.innerHTML = `<span class="direction unavailable">DATA UNAVAILABLE</span>`;
+
+  const modelEl = document.getElementById(`${c}Model`);
+  if (modelEl) modelEl.textContent = 'Unavailable';
+
+  const statusEl = document.getElementById(`${c}Status`);
+  if (statusEl) { statusEl.textContent = reason ? `⚠ ${reason}` : '⚠ Unavailable'; statusEl.className = 'status-badge declining'; }
+
+  ['Accuracy', 'Confidence', 'TakeoversCount', 'Expected'].forEach(field => {
+    const el = document.getElementById(`${c}${field}`);
+    if (el) el.textContent = '—';
+  });
+  ['AccuracyTrend', 'ConfidenceTrend', 'TakeoversTrend'].forEach(field => {
+    const el = document.getElementById(`${c}${field}`);
+    if (el) { el.textContent = '—'; el.className = 'metric-trend neutral'; }
+  });
+}
+
 function updateSummaryCards() {
   COINS.forEach(coin => {
     const data = currentData[coin];
     if (!data) return;
+    if (!data.available) { renderUnavailableSummaryCard(coin, data.reason); return; }
 
     const lastPred = data.predictions[data.predictions.length - 1];
     const lastPrice = data.prices[data.prices.length - 1];
@@ -1841,19 +1807,25 @@ function updateSummaryCards() {
 
     // Price
     const priceEl = document.getElementById(`${c}Price`);
-    if (priceEl && lastPrice) {
-      const formatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: coin === 'LINK' ? 2 : 0,
-        maximumFractionDigits: coin === 'LINK' ? 2 : 2
-      });
-      priceEl.textContent = formatter.format(lastPrice.price);
+    if (priceEl) {
+      if (lastPrice) {
+        const formatter = new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: coin === 'LINK' ? 2 : 0,
+          maximumFractionDigits: coin === 'LINK' ? 2 : 2
+        });
+        priceEl.textContent = formatter.format(lastPrice.price);
+      } else {
+        priceEl.textContent = '—';
+      }
     }
 
     // Call & Confidence
     const callEl = document.getElementById(`${c}Call`);
-    if (callEl && lastPred) {
+    if (callEl && !lastPred) {
+      callEl.innerHTML = `<span class="direction unavailable">PREDICTION NOT AVAILABLE</span>`;
+    } else if (callEl && lastPred) {
       const direction = lastPred.direction;
       callEl.innerHTML = `
         <span class="direction ${direction === 'UP' ? 'up' : 'down'}">
@@ -1863,9 +1835,10 @@ function updateSummaryCards() {
       `;
     }
 
-    // Model
+    // Model -- data.currentModel is only ever a real chosen_variant label or
+    // null (no authoritative production selection yet); never a guess.
     const modelEl = document.getElementById(`${c}Model`);
-    if (modelEl) modelEl.textContent = data.currentModel;
+    if (modelEl) modelEl.textContent = data.currentModel || 'DATA UNAVAILABLE';
 
     // Improving/Declining/Stable status badge, driven by the accuracy trend
     const statusEl = document.getElementById(`${c}Status`);
@@ -1923,6 +1896,7 @@ function renderMiniCharts() {
 function renderSingleMiniChart(coin) {
   const data = currentData[coin];
   if (!data) return;
+  if (!data.available) return;
 
   const canvas = document.getElementById(`${coin.toLowerCase()}MiniCanvas`);
   if (!canvas) return;
@@ -1938,7 +1912,7 @@ function renderSingleMiniChart(coin) {
 
   const ctx = canvas.getContext('2d');
   const prices = slicedPrices.map(p => p.price);
-  const labels = slicedPrices.map(p => p.timestamp);
+  const labels = slicedPrices.map(p => p.ts);
 
   miniChartInstances[coin] = new Chart(ctx, {
     type: 'line',
@@ -1996,6 +1970,15 @@ function findNearestPrice(prices, targetTs) {
 function renderSingleChart(coin) {
   const data = currentData[coin];
   if (!data) return;
+  if (!data.available) {
+    const c = coin.toLowerCase();
+    if (chartInstances[coin]) { chartInstances[coin].destroy(); chartInstances[coin] = null; }
+    const badgeEl = document.getElementById(`${c}ModelBadge`);
+    if (badgeEl) { badgeEl.textContent = '⚠ Unavailable'; badgeEl.style.backgroundColor = '#FDEDEC'; badgeEl.style.color = '#E74C3C'; }
+    const takeoverEl = document.getElementById(`${c}Takeovers`);
+    if (takeoverEl) takeoverEl.textContent = '—';
+    return;
+  }
 
   const canvas = document.getElementById(`${coin.toLowerCase()}Chart`);
   if (!canvas) return;
@@ -2013,7 +1996,7 @@ function renderSingleChart(coin) {
   const slicedSelections = data.selections.filter(s => (s.ts ?? 0) >= cutoffTs);
 
   const priceData = slicedPrices.map(p => ({
-    x: p.ts || new Date(p.timestamp).getTime(),
+    x: p.ts,
     y: p.price
   }));
 
@@ -2021,18 +2004,40 @@ function renderSingleChart(coin) {
   // nearest actual price point by timestamp — not the price at the same
   // array index, since predictions/prices/selections aren't guaranteed to be
   // sampled on the same cadence or have matching lengths.
+  //
+  // A prediction with no covering selection record is grouped under an
+  // explicit "Production selection unavailable" bucket -- never defaulted to
+  // "Original k-NN", which would misrepresent an unknown production
+  // decision as a specific, guessed one (V3_ALIGNMENT_AUDIT.md #4/#5).
+  const NO_SELECTION_LABEL = 'Production selection unavailable';
   const modelGroups = {};
   slicedPredictions.forEach(pred => {
-    const predTs = pred.ts || new Date(pred.timestamp).getTime();
-    const sel = [...slicedSelections].reverse().find(s => (s.ts ?? 0) <= predTs) || slicedSelections[0];
-    const model = sel?.selected_variant || 'Original k-NN';
+    const predTs = pred.ts;
+    const sel = [...slicedSelections].reverse().find(s => (s.ts ?? 0) <= predTs) || null;
+    const model = sel?.selected_variant || NO_SELECTION_LABEL;
     if (!modelGroups[model]) modelGroups[model] = [];
     const pricePoint = findNearestPrice(slicedPrices, predTs);
+
+    // When the production selection record for this cycle carries its own
+    // chosen_p_up, that -- not the raw k-NN's own p_up -- is what production
+    // actually acted on; prefer it for direction/confidence so the chart
+    // never shows a different call than what was actually served
+    // (V3_ALIGNMENT_AUDIT.md #6). expectedMove/actualMove/correct are not
+    // selection-specific and always come from the raw prediction record.
+    let effective = pred;
+    if (sel?.chosen_p_up != null) {
+      const chosenDirection = sel.chosen_p_up >= 0.5 ? 'UP' : 'DOWN';
+      effective = {
+        ...pred,
+        direction: chosenDirection,
+        confidence: Math.round(Math.abs(sel.chosen_p_up - 0.5) * 2 * 100),
+      };
+    }
 
     modelGroups[model].push({
       x: predTs,
       y: pricePoint?.price ?? 0,
-      prediction: pred,
+      prediction: effective,
       model: model
     });
   });
@@ -2084,7 +2089,7 @@ function renderSingleChart(coin) {
   let lastModel = null;
   slicedSelections.forEach(sel => {
     const modelLabel = sel.selected_variant;
-    const selTs = sel.ts || new Date(sel.timestamp).getTime();
+    const selTs = sel.ts;
     if (lastModel && modelLabel !== lastModel) {
       const pricePoint = findNearestPrice(slicedPrices, selTs);
       switchPoints.push({
@@ -2155,11 +2160,16 @@ function renderSingleChart(coin) {
               // actualMove being present would mislabel any resolved-wrong
               // prediction as "Pending" whenever actualMove is missing.
               const status = p.correct === true ? '✅ Correct' : p.correct === false ? '❌ Wrong' : '⏳ Pending';
+              // deviation = realized return - median expected return (V2's own
+              // definition) -- only meaningful once both sides are real numbers.
+              const deviation = (p.actualMove != null && p.expectedMove != null)
+                ? (p.actualMove - p.expectedMove) : null;
               return [
                 `Model: ${raw.model}`,
-                `Call: ${p.direction === 'UP' ? 'BULLISH ▲' : 'BEARISH ▼'} (${p.confidence}% confidence)`,
-                `Expected move: ${p.expectedMove}%`,
-                `Actual move: ${p.actualMove != null ? p.actualMove + '%' : '—'}`,
+                `Call: ${p.direction === 'UP' ? 'BULLISH ▲' : 'BEARISH ▼'} (${p.confidence != null ? p.confidence + '% confidence' : 'confidence unavailable'})`,
+                `Expected move: ${p.expectedMove != null ? p.expectedMove.toFixed(2) + '%' : '—'}`,
+                `Actual move: ${p.actualMove != null ? p.actualMove.toFixed(2) + '%' : '—'}`,
+                `Deviation: ${deviation != null ? (deviation >= 0 ? '+' : '') + deviation.toFixed(2) + '%' : '—'}`,
                 `Status: ${status}`,
                 `Price: $${raw.y ? raw.y.toLocaleString() : 'N/A'}`
               ];
@@ -2208,6 +2218,7 @@ function updateChartLegends() {
   COINS.forEach(coin => {
     const data = currentData[coin];
     if (!data) return;
+    if (!data.available) return;
 
     const legendContainer = document.getElementById(`${coin.toLowerCase()}Legend`);
     if (!legendContainer) return;
@@ -2249,6 +2260,7 @@ function updateComparison() {
   COINS.forEach(coin => {
     const data = currentData[coin];
     if (!data) return;
+    if (!data.available) return;
 
     const correct = data.predictions.filter(p => p.correct === true).length;
     const total = data.predictions.filter(p => p.correct !== undefined && p.correct !== null).length;
@@ -2289,6 +2301,7 @@ function updateTimelines() {
   COINS.forEach(coin => {
     const data = currentData[coin];
     if (!data) return;
+    if (!data.available) return;
 
     const container = document.getElementById(`${coin.toLowerCase()}Timeline`);
     if (!container) return;
@@ -2326,6 +2339,7 @@ function updateDistributions() {
   COINS.forEach(coin => {
     const data = currentData[coin];
     if (!data) return;
+    if (!data.available) return;
 
     const container = document.getElementById(`${coin.toLowerCase()}Distribution`);
     if (!container) return;
@@ -2534,19 +2548,18 @@ async function loadExp002() {
   if (!bodyEl) return;
   setLabStatus(statusEl, 'Loading…', 'warn');
 
-  let audit;
-  try {
-    const res = await fetch(`${API_BASE}/research/anomaly-gate`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    audit = await res.json();
-    if (!audit || audit.ok === false || !audit.results) throw new Error(audit?.error || 'malformed response');
-  } catch (e) {
+  const result = await PulseAPI.fetchAnomalyGateAudit();
+  if (!result.ok) {
+    researchEndpointStatus = false;
+    renderDataIntegrityPanel();
     setLabStatus(statusEl, 'Fetch failed', 'warn');
-    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /research/anomaly-gate (${e.message}). Try Refresh.</p>`;
+    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /research/anomaly-gate (${result.error}). Try Refresh.</p>`;
     return;
   }
 
-  renderExp002Live(audit, statusEl, bodyEl);
+  researchEndpointStatus = true;
+  renderDataIntegrityPanel();
+  renderExp002Live({ results: result.results }, statusEl, bodyEl);
 }
 
 function renderExp002Live(audit, statusEl, bodyEl) {
@@ -2709,17 +2722,17 @@ async function loadExp003() {
   if (!bodyEl) return;
   setLabStatus(statusEl, 'Loading…', 'warn');
 
-  let rows;
-  try {
-    const res = await fetch(`${API_BASE}/challenger-recent?limit=200`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    rows = Array.isArray(data.predictions) ? data.predictions : [];
-  } catch (e) {
+  const result = await PulseAPI.fetchChallengerRecent({ limit: 200 });
+  if (!result.ok) {
+    researchEndpointStatus = false;
+    renderDataIntegrityPanel();
     setLabStatus(statusEl, 'Fetch failed', 'warn');
-    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /challenger-recent (${e.message}). Try Refresh.</p>`;
+    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /challenger-recent (${result.error}). Try Refresh.</p>`;
     return;
   }
+  researchEndpointStatus = true;
+  renderDataIntegrityPanel();
+  const rows = result.predictions;
 
   const ELIGIBILITY_BAR = 50;
   const isTriggered = r => r.momentum_triggered === 1 || r.momentum_triggered === true;
@@ -2826,33 +2839,52 @@ async function loadExp003() {
   }
 }
 
+// This tab describes V3 OBSERVING PulseWorkerV2's learning/calibration loop
+// -- predictions -> realized outcomes -> model performance -> selection
+// decisions -> research experiments -- it never claims V3 itself trains or
+// runs that loop. Every status below is derived from data this session
+// actually fetched, never a static "Healthy"/"Active" claim
+// (V3_ALIGNMENT_AUDIT.md item #15).
 async function loadLearningOverview() {
+  if (!Object.values(currentData).some(Boolean)) {
+    await loadAllData();
+  }
+
   const grid = document.getElementById('learnStatusGrid');
   if (grid) {
-    grid.innerHTML = `
-      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Prediction Ledger</p><p class="text-xs text-[#2ECC71] font-semibold">● Active (24H)</p></div>
-      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Outcome Resolution</p><p class="text-xs text-[#2ECC71] font-semibold">● Active</p></div>
-      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Learning Engine</p><p class="text-xs text-[#4A90E2] font-semibold">● Healthy</p></div>
-      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Asset Coverage</p><p class="text-xs text-[#1A1A2E] font-semibold">BTC, LINK, ETH</p></div>
-    `;
+    const values = COINS.map(c => currentData[c]).filter(Boolean);
+    const anyAvailable = values.some(d => d.available);
+    const anyResolved = values.some(d => d.available && d.predictions.some(p => p.correct !== null));
+    const anySelection = values.some(d => d.available && d.selectionAvailable);
+
+    const statusCard = (label, ok, okText, badText) => `
+      <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-xs font-bold text-[#1A1A2E]">${label}</p>
+        <p class="text-xs ${ok ? 'text-[#2ECC71]' : 'text-[#E74C3C]'} font-semibold">● ${ok ? okText : badText}</p>
+      </div>`;
+
+    grid.innerHTML =
+      statusCard('Prediction Ledger', anyAvailable, 'Reachable', 'Unreachable') +
+      statusCard('Outcome Resolution', anyResolved, 'Resolved outcomes present', 'No resolved outcomes yet') +
+      statusCard('Production Selection', anySelection, 'Active', 'No selection history available') +
+      `<div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]"><p class="text-xs font-bold text-[#1A1A2E]">Asset Coverage</p><p class="text-xs text-[#1A1A2E] font-semibold">BTC, LINK, ETH</p></div>`;
   }
   loadComparisonCards();
 }
 
 async function loadComparisonCards() {
-  const btcCard = document.getElementById('btcComparisonCard');
-  const linkCard = document.getElementById('linkComparisonCard');
-  const ethCard = document.getElementById('ethComparisonCard');
-
-  if (btcCard) {
-    btcCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">BTC Bitcoin</h3><p class="text-xs text-[#718096]">Active: ${currentData.BTC?.currentModel || 'Condition-Matched'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.BTC?.takeovers || 0}</p>`;
-  }
-  if (linkCard) {
-    linkCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">LINK Chainlink</h3><p class="text-xs text-[#718096]">Active: ${currentData.LINK?.currentModel || 'Challenger Tilted'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.LINK?.takeovers || 0}</p>`;
-  }
-  if (ethCard) {
-    ethCard.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">ETH Ethereum</h3><p class="text-xs text-[#718096]">Active: ${currentData.ETH?.currentModel || 'k-NN Calibrated'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${currentData.ETH?.takeovers || 0}</p>`;
-  }
+  const cardIds = { BTC: 'btcComparisonCard', LINK: 'linkComparisonCard', ETH: 'ethComparisonCard' };
+  const names = { BTC: 'Bitcoin', LINK: 'Chainlink', ETH: 'Ethereum' };
+  COINS.forEach(coin => {
+    const card = document.getElementById(cardIds[coin]);
+    if (!card) return;
+    const data = currentData[coin];
+    if (!data || !data.available) {
+      card.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">${coin} ${names[coin]}</h3><p class="text-xs text-[#E74C3C] font-semibold">DATA UNAVAILABLE</p>`;
+      return;
+    }
+    card.innerHTML = `<h3 class="text-sm font-bold text-[#1A1A2E] mb-1">${coin} ${names[coin]}</h3><p class="text-xs text-[#718096]">Active: ${data.currentModel || 'DATA UNAVAILABLE'}</p><p class="text-xs text-[#2ECC71] font-semibold mt-2">Takeovers: ${data.takeovers}</p>`;
+  });
 }
 
 // ============================================================
