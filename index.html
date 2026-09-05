@@ -2225,7 +2225,7 @@ function updateChartLegends() {
 
     const modelCounts = {};
     data.selections.forEach(s => {
-      const model = s.selected_variant || 'Original k-NN';
+      const model = s.selected_variant || 'Production selection unavailable';
       modelCounts[model] = (modelCounts[model] || 0) + 1;
     });
 
