@@ -123,6 +123,76 @@ export function normalizePricePoint(raw) {
   return { available: true, ts, price: rawPrice };
 }
 
+/**
+ * @typedef {Object} TimesFmForecast
+ * @property {boolean} available
+ * @property {number} [ts] - when this forecast was made
+ * @property {number} [target_ts] - the timestamp this forecast is for
+ * @property {string} [coin]
+ * @property {number} [horizon_hours]
+ * @property {number|null} [forecast_price]
+ * @property {number|null} [predicted_return_pct]
+ * @property {'UP'|'DOWN'|null} [direction] - threshold on predicted_return_pct, NOT a probability -- TimesFM does not provide one here
+ * @property {string|null} [model_version]
+ * @property {string|null} [checkpoint]
+ * @property {boolean} [resolved] - false means "pending", never treated as incorrect
+ * @property {number|null} [actual_return_pct] - null while unresolved
+ * @property {'UP'|'DOWN'|null} [actual_direction] - null while unresolved
+ * @property {boolean|null} [correct] - null while unresolved, never fabricated as false
+ * @property {number|null} [absolute_error] - null while unresolved
+ * @property {number|null} [signed_error] - null while unresolved
+ */
+export function normalizeTimesFmForecast(raw) {
+  if (!raw) return { available: false, reason: 'missing TimesFM forecast row' };
+
+  const ts = coerceTimestamp(raw);
+  if (ts == null) return { available: false, reason: 'TimesFM row has no valid ts' };
+
+  const targetTs = isValidTimestamp(Number(raw.target_ts)) ? Number(raw.target_ts) : null;
+  if (targetTs == null) return { available: false, reason: 'TimesFM row has no valid target_ts' };
+
+  const coin = raw.coin || null;
+  if (!coin) return { available: false, reason: 'TimesFM row has no coin field' };
+
+  const horizonHours = coerceFiniteNumber(raw.horizon_hours);
+  if (horizonHours == null) return { available: false, reason: 'TimesFM row has no valid horizon_hours' };
+
+  const forecastPrice = coerceFiniteNumber(raw.forecast_price);
+  const predictedReturnPct = coerceFiniteNumber(raw.predicted_return_pct);
+  const direction = coerceDirection(raw.direction);
+  if (forecastPrice == null || predictedReturnPct == null || direction == null) {
+    return { available: false, reason: 'TimesFM row is missing its forecast (forecast_price/predicted_return_pct/direction)' };
+  }
+
+  const resolvedTs = raw.resolved_ts != null && isValidTimestamp(Number(raw.resolved_ts)) ? Number(raw.resolved_ts) : null;
+  const resolved = resolvedTs != null;
+
+  let correct = null;
+  if (typeof raw.correct === 'number') correct = raw.correct === 1;
+  else if (typeof raw.correct === 'boolean') correct = raw.correct;
+
+  return {
+    available: true,
+    ts,
+    target_ts: targetTs,
+    coin,
+    horizon_hours: horizonHours,
+    price_at_prediction: coerceFiniteNumber(raw.price_at_prediction),
+    forecast_price: forecastPrice,
+    predicted_return_pct: predictedReturnPct,
+    direction,
+    model_version: raw.model_version || null,
+    checkpoint: raw.checkpoint || null,
+    resolved,
+    resolved_ts: resolvedTs,
+    actual_return_pct: resolved ? coerceFiniteNumber(raw.actual_return_pct) : null,
+    actual_direction: resolved ? coerceDirection(raw.actual_direction) : null,
+    correct: resolved ? correct : null,
+    absolute_error: resolved ? coerceFiniteNumber(raw.absolute_error) : null,
+    signed_error: resolved ? coerceFiniteNumber(raw.signed_error) : null,
+  };
+}
+
 // Human-readable label for known variant keys/names. Falls back to the raw
 // string as-is (still real backend data, just unmapped) -- never invents a
 // name for a variant this map doesn't know about.
