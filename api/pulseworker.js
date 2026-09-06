@@ -7,7 +7,7 @@
 // explanation and research-observability layer." -- nothing in this file
 // invents a prediction, selection, or metric; it only reads and validates.
 
-import { normalizePrediction, normalizeSelection, normalizePricePoint } from './normalize.js';
+import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast } from './normalize.js';
 import { isSupportedCoin, isSupportedHorizon } from './validation.js';
 
 export const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
@@ -99,6 +99,34 @@ export async function fetchAnomalyGateAudit({ apiBase = API_BASE } = {}) {
     const raw = await res.json();
     if (!raw || raw.ok === false || !raw.results) return { ok: false, error: raw?.error || 'malformed response' };
     return { ok: true, results: raw.results };
+  } catch (e) {
+    return { ok: false, error: describeError(e) };
+  }
+}
+
+// Research-only (Experiment 4: Google TimesFM research challenger).
+// BTC-only, matching the experiment's actual scope -- see
+// PulseWorkerV2's /research/timesfm-recent, which does not run inside
+// the Worker at all and never touches selection_decisions/chosen_variant.
+// summary.total/resolved/unresolved come straight from the backend's own
+// aggregate; this adapter never derives or fabricates them client-side.
+export async function fetchTimesFmRecent(horizon, { limit = 20, apiBase = API_BASE } = {}) {
+  if (!isSupportedHorizon(horizon)) return { ok: false, error: `unsupported horizon: ${horizon}` };
+  try {
+    const res = await fetchWithTimeout(`${apiBase}/research/timesfm-recent?horizon=${horizon}&limit=${limit}`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const raw = await res.json();
+    if (!raw || raw.ok === false || !raw.summary) return { ok: false, error: raw?.error || 'malformed response' };
+    const forecasts = (raw.forecasts || []).map(normalizeTimesFmForecast).filter(f => f.available);
+    return {
+      ok: true,
+      summary: {
+        total: Number.isFinite(raw.summary.total) ? raw.summary.total : 0,
+        resolved: Number.isFinite(raw.summary.resolved) ? raw.summary.resolved : 0,
+        unresolved: Number.isFinite(raw.summary.unresolved) ? raw.summary.unresolved : 0,
+      },
+      forecasts,
+    };
   } catch (e) {
     return { ok: false, error: describeError(e) };
   }
