@@ -7,7 +7,7 @@
 // explanation and research-observability layer." -- nothing in this file
 // invents a prediction, selection, or metric; it only reads and validates.
 
-import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast } from './normalize.js';
+import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast, normalizeRegistryEntry } from './normalize.js';
 import { isSupportedCoin, isSupportedHorizon } from './validation.js';
 
 export const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
@@ -127,6 +127,27 @@ export async function fetchTimesFmRecent(horizon, { limit = 20, apiBase = API_BA
       },
       forecasts,
     };
+  } catch (e) {
+    return { ok: false, error: describeError(e) };
+  }
+}
+
+// Program Foundation Experiment Registry. PulseWorkerV2/D1 is the
+// source of truth (research_experiment_registry, joined live against
+// each experiment's own data table at request time -- see worker.js's
+// getResearchLabRegistry) -- this adapter reads it, never writes, and
+// never derives a status/result client-side that the backend itself
+// didn't already compute.
+export async function fetchExperimentRegistry({ apiBase = API_BASE } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${apiBase}/api/research-lab/registry`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const raw = await res.json();
+    if (!raw || raw.ok === false || !Array.isArray(raw.experiments)) {
+      return { ok: false, error: raw?.error || 'malformed response' };
+    }
+    const experiments = raw.experiments.map(normalizeRegistryEntry).filter((e) => e.available);
+    return { ok: true, experiments };
   } catch (e) {
     return { ok: false, error: describeError(e) };
   }

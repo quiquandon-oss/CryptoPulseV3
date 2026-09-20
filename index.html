@@ -1402,6 +1402,15 @@
       <div id="exp004Body"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
+    <!-- Program Foundation Experiment Registry -- PulseWorkerV2/D1
+         (research_experiment_registry) is the source of truth; V3 only
+         reads and renders it via PulseAPI.fetchExperimentRegistry(). -->
+    <div class="mb-4 mt-8">
+      <p class="text-xs uppercase tracking-wider text-[#4A90E2] font-bold">Experiment Registry</p>
+      <p class="text-xs text-[#718096] mt-0.5">Full program-level lifecycle for every registered CryptoPulse research experiment. Expected results are stated in advance and never edited after the fact; actual/measured results come only from real accumulated data.</p>
+    </div>
+    <div id="experimentRegistrySection"><p class="text-xs text-[#718096]">Loading…</p></div>
+
     <!-- COMPARISON (prepared architecture -- see loadComparisonPanel) -->
     <section id="comparisonCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -2554,7 +2563,7 @@ document.getElementById('refreshBtn').onclick = async () => {
 // ============================================================
 
 async function loadLab() {
-  await Promise.all([loadExp002(), loadExp003(), loadExp004()]);
+  await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExperimentRegistry()]);
   loadComparisonPanel();
 }
 
@@ -3004,6 +3013,110 @@ function renderExp004Live(statusEl, bodyEl, byHorizon) {
       ${renderTimesFmHorizonPanel(24, byHorizon[24])}
     </div>
   `;
+}
+
+// ---- Program Foundation Experiment Registry. PulseWorkerV2/D1
+// (research_experiment_registry, joined live against each experiment's
+// own data table) is the source of truth -- this renders exactly what
+// the backend returns, field for field, with no client-side derivation
+// of status/results. A PROPOSED/NOT_STARTED experiment is rendered
+// exactly as such, never hidden or filled in. ----
+const REGISTRY_STATUS_KIND = {
+  PROPOSED: 'neutral', BUILDING: 'warn', RUNNING: 'warn', ACCUMULATING: 'warn',
+  READY_FOR_ANALYSIS: 'warn', ANALYZED: 'ok', OOS_VALIDATION: 'warn',
+  CHATGPT_REVIEW: 'warn', HUMAN_APPROVAL: 'warn', DEPLOYED: 'ok',
+  REJECTED: 'declining', CONTINUE: 'warn',
+};
+
+function badgeClassForStatus(status) {
+  const kind = REGISTRY_STATUS_KIND[status] || 'neutral';
+  return kind === 'ok' ? 'status-ok' : kind === 'declining' ? 'declining' : kind === 'warn' ? 'status-warning' : 'status-neutral';
+}
+
+// Registry fields are deliberately typed as EITHER a fixed placeholder
+// string (NOT_STARTED / NOT_AVAILABLE / INSUFFICIENT_SAMPLE / UNKNOWN)
+// OR a real object -- this renders whichever one the backend actually
+// sent, never coercing one into the other.
+function fmtRegistryField(value) {
+  if (value == null) return '—';
+  if (typeof value === 'string') return esc(value);
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return value.map(fmtRegistryField).join('; ');
+    return Object.entries(value)
+      .filter(([k]) => k !== 'note')
+      .map(([k, v]) => `${esc(k)}: ${typeof v === 'object' ? fmtRegistryField(v) : esc(String(v))}`)
+      .join(' · ');
+  }
+  return esc(String(value));
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadExperimentRegistry() {
+  const el = document.getElementById('experimentRegistrySection');
+  if (!el) return;
+  el.innerHTML = '<p class="text-xs text-[#718096]">Loading…</p>';
+
+  const result = await PulseAPI.fetchExperimentRegistry();
+  if (!result.ok) {
+    el.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /api/research-lab/registry (${result.error}). Try Refresh.</p>`;
+    return;
+  }
+  if (result.experiments.length === 0) {
+    el.innerHTML = '<p class="text-xs text-[#718096]">No experiments registered yet.</p>';
+    return;
+  }
+
+  el.innerHTML = result.experiments.map(renderRegistryCard).join('');
+}
+
+function renderRegistryCard(e) {
+  const noteId = `registryNote-${e.experiment_id}`;
+  return `
+  <section class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-4 shadow-xs hover:shadow-md transition-shadow">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">${esc(e.experiment_id)} · ${esc(e.title)}</p>
+        <span class="status-badge ${badgeClassForStatus(e.status)}">${esc(e.status)}</span>
+        <span class="status-badge status-neutral">${esc(e.experiment_type)}</span>
+      </div>
+      <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'${noteId}')">ⓘ Details</button>
+    </div>
+    <div class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0] space-y-1.5" id="${noteId}">
+      <p><span class="text-[#718096] font-semibold">Research question:</span> ${esc(e.research_question)}</p>
+      <p><span class="text-[#718096] font-semibold">Purpose:</span> ${esc(e.purpose)}</p>
+      <p><span class="text-[#718096] font-semibold">Expected result:</span> ${esc(e.expected_result)}</p>
+      <p><span class="text-[#718096] font-semibold">Success criterion:</span> ${esc(e.success_criterion)}</p>
+      <p><span class="text-[#718096] font-semibold">Baseline:</span> ${esc(e.baseline)}</p>
+      ${e.conclusion ? `<p><span class="text-[#718096] font-semibold">Conclusion:</span> ${esc(e.conclusion)}</p>` : ''}
+      <p><span class="text-[#718096] font-semibold">Next action:</span> ${esc(e.next_action)}</p>
+      ${e.github_refs ? `<p><span class="text-[#718096] font-semibold">GitHub refs:</span> <code class="font-mono-data">${esc(e.github_refs)}</code></p>` : ''}
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Start / target date</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${e.start_date || 'NOT_STARTED'} → ${e.target_date || '—'}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Sample / required</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.current_sample_size)} / ${e.required_sample ?? '—'}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Measured result</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.current_measured_result)}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">OOS result</p>
+        <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.oos_result)}</p>
+      </div>
+    </div>
+    <div class="mt-2 flex items-center justify-between flex-wrap gap-2">
+      <span class="text-[0.65rem] text-[#718096]">Confidence/maturity: <span class="font-semibold">${esc(e.confidence_evidence_maturity)}</span></span>
+      <span class="text-[0.65rem] text-[#718096]">Last updated: ${fmtLabDateTime(e.last_updated)}</span>
+    </div>
+  </section>`;
 }
 
 // ---- Comparison panel: prepared architecture for k-NN vs Challenger vs

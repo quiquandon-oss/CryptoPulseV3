@@ -1,6 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast } from '../api/normalize.js';
+import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast, normalizeRegistryEntry } from '../api/normalize.js';
+
+function baseRegistryRow(overrides = {}) {
+  return {
+    experiment_id: 'EXP-004', title: 't', research_question: 'q', purpose: 'p',
+    experiment_type: 'TYPE_2', expected_result: 'e', success_criterion: 's',
+    status: 'ACCUMULATING', baseline: 'b', next_action: 'n',
+    ...overrides,
+  };
+}
+
+test('normalizeRegistryEntry: missing row -> unavailable, not a fabricated default', () => {
+  assert.equal(normalizeRegistryEntry(null).available, false);
+});
+
+test('normalizeRegistryEntry: a row missing any required field is unavailable', () => {
+  for (const field of ['experiment_id', 'title', 'research_question', 'purpose', 'experiment_type', 'expected_result', 'success_criterion', 'status', 'baseline', 'next_action']) {
+    const result = normalizeRegistryEntry(baseRegistryRow({ [field]: undefined }));
+    assert.equal(result.available, false, `expected unavailable when ${field} is missing`);
+  }
+});
+
+test('normalizeRegistryEntry: a complete row passes through its real fields unmodified', () => {
+  const result = normalizeRegistryEntry(baseRegistryRow({
+    start_date: '2026-09-06', required_sample: 30,
+    current_sample_size: { total_resolved: 28 }, oos_result: 'INSUFFICIENT_SAMPLE',
+  }));
+  assert.equal(result.available, true);
+  assert.equal(result.experiment_id, 'EXP-004');
+  assert.equal(result.start_date, '2026-09-06');
+  assert.equal(result.required_sample, 30);
+  assert.deepEqual(result.current_sample_size, { total_resolved: 28 });
+  assert.equal(result.oos_result, 'INSUFFICIENT_SAMPLE');
+});
+
+test('normalizeRegistryEntry: absent optional/live fields fall back to the documented placeholder vocabulary, never invented numbers', () => {
+  const result = normalizeRegistryEntry(baseRegistryRow());
+  assert.equal(result.start_date, null);
+  assert.equal(result.target_date, null);
+  assert.equal(result.required_sample, null);
+  assert.equal(result.current_sample_size, 'NOT_AVAILABLE');
+  assert.equal(result.current_measured_result, 'NOT_AVAILABLE');
+  assert.equal(result.oos_result, 'NOT_AVAILABLE');
+  assert.equal(result.confidence_evidence_maturity, 'UNKNOWN');
+  assert.equal(result.conclusion, null);
+});
 
 test('missing prediction -> unavailable, not a fabricated default', () => {
   const result = normalizePrediction({});

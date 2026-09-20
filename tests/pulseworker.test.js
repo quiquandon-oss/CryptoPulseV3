@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent } from '../api/pulseworker.js';
+import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent, fetchExperimentRegistry } from '../api/pulseworker.js';
 
 function mockFetchOnce(handler) {
   const original = global.fetch;
@@ -173,5 +173,87 @@ test('fetchTimesFmRecent: malformed response (no summary) -> explicit failure', 
   try {
     const result = await fetchTimesFmRecent(12);
     assert.equal(result.ok, false);
+  } finally { restore(); }
+});
+
+function baseRegistryRow(overrides = {}) {
+  return {
+    experiment_id: 'EXP-004', title: 'TimesFM BTC Challenger', research_question: 'q?', purpose: 'p',
+    experiment_type: 'TYPE_2', expected_result: 'e', success_criterion: 's', status: 'ACCUMULATING',
+    baseline: 'b', next_action: 'n',
+    start_date: '2026-09-06', target_date: null, required_sample: 30,
+    current_sample_size: { total_forecasts: 30, total_resolved: 28 },
+    current_measured_result: { combined_correct_of_resolved: '12/28' },
+    oos_result: 'INSUFFICIENT_SAMPLE', confidence_evidence_maturity: 'INSUFFICIENT_SAMPLE',
+    conclusion: null, github_refs: null, last_updated: 1789819245336,
+    ...overrides,
+  };
+}
+
+test('fetchExperimentRegistry: hits /api/research-lab/registry, source of truth is PulseWorkerV2', async () => {
+  let requestedUrl = null;
+  const restore = mockFetchOnce(async (url) => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({ ok: true, experiments: [] }), { status: 200 });
+  });
+  try {
+    await fetchExperimentRegistry();
+    assert.match(String(requestedUrl), /\/api\/research-lab\/registry$/);
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: returns real experiment rows unmodified, never re-derives status client-side', async () => {
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({
+    ok: true, experiments: [baseRegistryRow()],
+  }), { status: 200 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.ok, true);
+    assert.equal(result.experiments.length, 1);
+    assert.equal(result.experiments[0].status, 'ACCUMULATING');
+    assert.equal(result.experiments[0].oos_result, 'INSUFFICIENT_SAMPLE');
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: a PROPOSED/NOT_STARTED row is kept as-is, never backfilled with fake progress', async () => {
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({
+    ok: true,
+    experiments: [baseRegistryRow({
+      experiment_id: 'EXP-008', status: 'PROPOSED', start_date: null, required_sample: null,
+      current_sample_size: 'NOT_STARTED', current_measured_result: 'NOT_AVAILABLE',
+      oos_result: 'NOT_AVAILABLE', confidence_evidence_maturity: 'UNKNOWN',
+    })],
+  }), { status: 200 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.experiments[0].current_sample_size, 'NOT_STARTED');
+    assert.equal(result.experiments[0].start_date, null);
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: a row missing a required field is dropped, not patched with defaults', async () => {
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({
+    ok: true, experiments: [baseRegistryRow({ title: undefined })],
+  }), { status: 200 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.experiments.length, 0);
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: malformed response (no experiments array) -> explicit failure', async () => {
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.ok, false);
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: HTTP error status -> explicit failure, not a fabricated fallback', async () => {
+  const restore = mockFetchOnce(async () => new Response('server error', { status: 500 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.ok, false);
+    assert.match(result.error, /500/);
   } finally { restore(); }
 });
