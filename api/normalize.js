@@ -193,6 +193,57 @@ export function normalizeTimesFmForecast(raw) {
   };
 }
 
+// Program Foundation Experiment Registry field set is intentionally NOT
+// forced through per-field validators the way predictions/selections are:
+// registry rows are administrative metadata written by the build process
+// itself (not parsed from a live external feed), and several fields are
+// LEGITIMATELY one of a small fixed vocabulary (NOT_STARTED,
+// NOT_AVAILABLE, INSUFFICIENT_SAMPLE, UNKNOWN) or a plain object (e.g.
+// current_measured_result's by-horizon breakdown) rather than a single
+// coerced number/string. This normalizer's only job is the one thing
+// that matters for "never fabricate": every registry entry must at
+// least be a real object with the fields the registry's own field list
+// requires, and a missing/malformed row must surface as unavailable,
+// never be silently backfilled with a default.
+const REGISTRY_REQUIRED_FIELDS = [
+  'experiment_id', 'title', 'research_question', 'purpose', 'experiment_type',
+  'expected_result', 'success_criterion', 'status', 'baseline', 'next_action',
+];
+
+/**
+ * @typedef {Object} ExperimentRegistryEntry
+ * @property {boolean} available
+ */
+export function normalizeRegistryEntry(raw) {
+  if (!raw || typeof raw !== 'object') return { available: false, reason: 'missing registry row' };
+  for (const field of REGISTRY_REQUIRED_FIELDS) {
+    if (raw[field] == null) return { available: false, reason: `registry row missing required field: ${field}` };
+  }
+  return {
+    available: true,
+    experiment_id: raw.experiment_id,
+    title: raw.title,
+    research_question: raw.research_question,
+    purpose: raw.purpose,
+    experiment_type: raw.experiment_type,
+    expected_result: raw.expected_result,
+    success_criterion: raw.success_criterion,
+    start_date: raw.start_date ?? null,
+    target_date: raw.target_date ?? null,
+    status: raw.status,
+    baseline: raw.baseline,
+    required_sample: raw.required_sample ?? null,
+    current_sample_size: raw.current_sample_size ?? 'NOT_AVAILABLE',
+    current_measured_result: raw.current_measured_result ?? 'NOT_AVAILABLE',
+    oos_result: raw.oos_result ?? 'NOT_AVAILABLE',
+    confidence_evidence_maturity: raw.confidence_evidence_maturity ?? 'UNKNOWN',
+    conclusion: raw.conclusion ?? null,
+    next_action: raw.next_action,
+    github_refs: raw.github_refs ?? null,
+    last_updated: raw.last_updated ?? null,
+  };
+}
+
 // Human-readable label for known variant keys/names. Falls back to the raw
 // string as-is (still real backend data, just unmapped) -- never invents a
 // name for a variant this map doesn't know about.
