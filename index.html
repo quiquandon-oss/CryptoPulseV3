@@ -2658,19 +2658,19 @@ function renderExp002Live(audit, statusEl, bodyEl) {
 
   bodyEl.innerHTML = `
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Logged cycles</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${allRows.length}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Episodes</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${totalEpisodes}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Paired resolved</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${comparable}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Data span</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(allRows[0]?.prediction_ts)} → ${fmtLabDate(allRows[allRows.length - 1]?.prediction_ts)}</p>
       </div>
@@ -2815,21 +2815,21 @@ async function loadExp003() {
 
   bodyEl.innerHTML = `
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Triggered</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${triggered.length}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Resolved</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${resolved.length} / ${ELIGIBILITY_BAR}</p>
         <div class="w-full h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden mt-1"><div class="h-full bg-[#4A90E2]" style="width:${progressPct}%"></div></div>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Momentum accuracy</p>
         <p class="text-sm font-bold ${momentumAcc == null ? 'text-[#1A1A2E]' : momentumAcc >= flatAcc ? 'text-[#2ECC71]' : 'text-[#E74C3C]'}">${momentumAcc == null ? '—' : momentumAcc.toFixed(1) + '%'}</p>
         <p class="text-[0.6rem] text-[#718096]">flat baseline: ${flatAcc == null ? '—' : flatAcc.toFixed(1) + '%'}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Data span</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${fmtLabDate(triggered[0]?.ts)} → ${fmtLabDate(triggered[triggered.length - 1]?.ts)}</p>
       </div>
@@ -2990,19 +2990,19 @@ function renderExp004Live(statusEl, bodyEl, byHorizon) {
 
   bodyEl.innerHTML = `
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Forecasts generated</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${total}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Resolved</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${resolved}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Unresolved</p>
         <p class="text-sm font-bold text-[#1A1A2E]">${unresolved}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Model</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">TimesFM 2.5</p>
       </div>
@@ -3105,11 +3105,11 @@ function renderRegistryCard(e) {
     <!-- Timeline: start / target / status (badge above) / next action --
          all immediately visible, no click required (audit finding). -->
     <div class="grid grid-cols-2 gap-3 mb-3">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Start → target</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${e.start_date ? esc(e.start_date) : '<span class="text-[#95A5A6] italic font-normal">NOT_STARTED</span>'} → ${e.target_date ? esc(e.target_date) : '—'}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Next action</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${esc(e.next_action)}</p>
       </div>
@@ -3118,11 +3118,11 @@ function renderRegistryCard(e) {
     <!-- Expected vs. Actual: side by side so the two can never be
          confused for each other (audit finding). -->
     <div class="grid grid-cols-2 gap-3 mb-3">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#4A90E2] font-bold">Expected</p>
         <p class="text-xs text-[#1A1A2E] mt-0.5">${expectedText}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-bold">Actual (measured)</p>
         <p class="text-xs font-semibold text-[#1A1A2E] mt-0.5">${fmtRegistryField(e.current_measured_result)}</p>
       </div>
@@ -3136,15 +3136,15 @@ function renderRegistryCard(e) {
       ${e.github_refs ? `<p><span class="text-[#718096] font-semibold">GitHub refs:</span> <code class="font-mono-data">${esc(e.github_refs)}</code></p>` : ''}
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Sample / required</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.current_sample_size)} / ${e.required_sample ?? '—'}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">OOS result</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.oos_result)}</p>
       </div>
-      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
         <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Confidence / maturity</p>
         <p class="text-xs font-semibold text-[#1A1A2E]">${fmtRegistryField(e.confidence_evidence_maturity)}</p>
       </div>
