@@ -1402,6 +1402,21 @@
       <div id="exp004Body"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
 
+    <!-- EXP-005 -->
+    <section id="exp005Card" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">EXP-005 · Experiment 5 (Agentic Market Evidence)</p>
+          <span id="exp005Status" class="status-badge status-warning">Loading…</span>
+          <span class="status-badge status-neutral">RESEARCH ONLY</span>
+          <span class="status-badge status-ok" title="Research-only: Experiment 5's decisions live in research_hypotheses (subject LIKE 'experiment5:%'), never in SELECTION_VARIANTS, and never touch production sentiment weights or the production write path.">Production impact: NO</span>
+        </div>
+        <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'exp005Note')">ⓘ Info</button>
+      </div>
+      <p class="hidden text-xs text-[#4A4A5E] mb-3 leading-relaxed bg-[#F8F9FA] p-3 rounded-xl border border-[#E2E8F0]" id="exp005Note">A deterministic, zero-AI challenger over BTC composite sentiment: permanently archives every observation (fixing V1's own 500-row cap), classifies its dynamics (trend, reversal, cross-source confirmation), proposes a directional decision only on confirmation or reversal, and resolves it against realized BTC direction only once its own declared horizon has actually elapsed -- alongside V1's own baseline call for the identical moment. The full lifecycle, decision history and results comparison live on PulseWorkerV2's own Research Lab page (linked below); this card shows a live summary only.</p>
+      <div id="exp005Body"><p class="text-xs text-[#718096]">Loading…</p></div>
+    </section>
+
     <!-- Program Foundation Experiment Registry -- PulseWorkerV2/D1
          (research_experiment_registry) is the source of truth; V3 only
          reads and renders it via PulseAPI.fetchExperimentRegistry(). -->
@@ -2563,7 +2578,7 @@ document.getElementById('refreshBtn').onclick = async () => {
 // ============================================================
 
 async function loadLab() {
-  await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExperimentRegistry()]);
+  await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExp005(), loadExperimentRegistry()]);
   loadComparisonPanel();
 }
 
@@ -3012,6 +3027,102 @@ function renderExp004Live(statusEl, bodyEl, byHorizon) {
       ${renderTimesFmHorizonPanel(12, byHorizon[12])}
       ${renderTimesFmHorizonPanel(24, byHorizon[24])}
     </div>
+  `;
+}
+
+// ---- EXP-005: GET /api/research-lab/experiment5-overview +
+// /api/research-lab/experiment5-results. Both already report
+// activation state, counts and sample-size gating -- this renders
+// exactly what the backend computed, never re-deriving a classification,
+// eligibility state, or accuracy figure client-side. The full lifecycle,
+// decision-by-decision history and provenance live on PulseWorkerV2's
+// own Research Lab page; this card is a live summary + a link there.
+async function loadExp005() {
+  const statusEl = 'exp005Status';
+  const bodyEl = document.getElementById('exp005Body');
+  if (!bodyEl) return;
+  setLabStatus(statusEl, 'Loading…', 'warn');
+
+  const [overview, results] = await Promise.all([
+    PulseAPI.fetchExperiment5Overview(),
+    PulseAPI.fetchExperiment5Results(),
+  ]);
+
+  if (!overview.ok) {
+    setLabStatus(statusEl, 'Fetch failed', 'warn');
+    bodyEl.innerHTML = `<p class="text-xs text-[#E74C3C]">Could not reach /api/research-lab/experiment5-overview (${overview.error}). Try Refresh.</p>`;
+    return;
+  }
+
+  renderExp005Live(statusEl, bodyEl, overview, results);
+}
+
+function renderExp005Live(statusEl, bodyEl, overview, results) {
+  if (!overview.activated) {
+    setLabStatus(statusEl, 'NOT YET ACTIVE', 'warn');
+    bodyEl.innerHTML = `
+      <p class="text-xs text-[#718096] mb-2">${overview.reason || 'Experiment 5’s database migrations have not been applied to production yet.'}</p>
+      <p class="text-xs"><a href="${PulseAPI.API_BASE}/research-lab" target="_blank" rel="noopener" class="text-[#4A90E2] hover:underline">Open the full Research Lab →</a></p>
+    `;
+    return;
+  }
+
+  const dec = overview.decisions || {};
+  const pending = overview.pending_breakdown || {};
+  if (!dec.proposed) {
+    setLabStatus(statusEl, 'COLLECTING DATA', 'warn');
+  } else if (!dec.resolved) {
+    setLabStatus(statusEl, 'COLLECTING DATA', 'warn');
+  } else if (results && results.ok && results.activated && !results.sufficient_sample) {
+    setLabStatus(statusEl, 'INSUFFICIENT DATA', 'warn');
+  } else {
+    setLabStatus(statusEl, 'READY FOR EVALUATION', 'ok');
+  }
+
+  const narrative = (overview.narrative || []).map((line) =>
+    `<p class="text-xs text-[#4A4A5E] mb-1">${line}</p>`
+  ).join('');
+
+  const insufficientNotice = (results && results.ok && results.activated && !results.sufficient_sample)
+    ? `<p class="text-xs font-semibold text-[#D68910] mb-3">INSUFFICIENT DATA — NO PERFORMANCE CONCLUSION (${results.agent_n} of ${results.min_sample_for_conclusion} minimum resolved decisions)</p>`
+    : '';
+
+  const comparisonBlock = (results && results.ok && results.activated && results.sufficient_sample)
+    ? `<div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+          <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Challenger accuracy</p>
+          <p class="text-sm font-bold text-[#1A1A2E]">${Math.round(results.agent_accuracy * 100)}% <span class="text-[0.65rem] font-normal text-[#718096]">(n=${results.agent_n})</span></p>
+        </div>
+        <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+          <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">V1 baseline accuracy</p>
+          <p class="text-sm font-bold text-[#1A1A2E]">${Math.round(results.v1_baseline_accuracy * 100)}% <span class="text-[0.65rem] font-normal text-[#718096]">(n=${results.v1_baseline_n})</span></p>
+        </div>
+      </div>`
+    : '';
+
+  bodyEl.innerHTML = `
+    ${narrative}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3 mt-2">
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Archived observations</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${overview.archive.n_observations}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Decisions proposed</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${dec.proposed || 0}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Resolved</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${dec.resolved || 0}</p>
+      </div>
+      <div class="p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0] min-w-0 break-words">
+        <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Awaiting resolution</p>
+        <p class="text-sm font-bold text-[#1A1A2E]">${(pending.not_yet_eligible || 0) + (pending.eligible_awaiting_resolution || 0)}</p>
+      </div>
+    </div>
+    ${insufficientNotice}
+    ${comparisonBlock}
+    <p class="text-xs"><a href="${PulseAPI.API_BASE}/research-lab" target="_blank" rel="noopener" class="text-[#4A90E2] hover:underline">Open the full Research Lab (lifecycle, decision history, source intelligence) →</a></p>
   `;
 }
 

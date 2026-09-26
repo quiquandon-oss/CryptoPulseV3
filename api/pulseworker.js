@@ -153,6 +153,38 @@ export async function fetchExperimentRegistry({ apiBase = API_BASE } = {}) {
   }
 }
 
+// Experiment 5: agentic market evidence. PulseWorkerV2/D1 is the source
+// of truth (research_sentiment_archive + research_hypotheses, migrations
+// 0008/0015 -- not yet applied to production as of this change) -- this
+// adapter only reads what the backend already computed (activation
+// state, counts, the deterministic plain-language narrative) and never
+// derives a classification, decision, or comparison verdict itself.
+// Because the migrations may not be applied yet, `activated: false` is
+// an expected, valid response shape here, not an error.
+export async function fetchExperiment5Overview({ apiBase = API_BASE } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${apiBase}/api/research-lab/experiment5-overview`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const raw = await res.json();
+    if (!raw || raw.ok === false) return { ok: false, error: raw?.error || 'malformed response' };
+    return raw;
+  } catch (e) {
+    return { ok: false, error: describeError(e) };
+  }
+}
+
+export async function fetchExperiment5Results({ apiBase = API_BASE } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${apiBase}/api/research-lab/experiment5-results`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const raw = await res.json();
+    if (!raw || raw.ok === false) return { ok: false, error: raw?.error || 'malformed response' };
+    return raw;
+  } catch (e) {
+    return { ok: false, error: describeError(e) };
+  }
+}
+
 // Cheap reachability probe for the Data Integrity panel -- hits the
 // health-check root, does not imply anything about D1/prediction freshness
 // on its own (that's derived from fetchChartData's own timestamps).

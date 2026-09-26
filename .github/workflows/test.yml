@@ -1,0 +1,38 @@
+name: Test
+
+# Runs this repo's existing test suite (api/*.js's own Node built-in
+# test runner, `node --test`, already run manually via `npm test`) on
+# every pull request, closing the CI-coverage gap a pre-release audit
+# found: this repo previously had exactly one workflow (deploy.yml),
+# which only triggers on push to the default branch, so no automated
+# test run ever covered a feature branch or a PR.
+#
+# Deliberately separate from deploy.yml, and deliberately incapable of
+# deploying Pages:
+#   - permissions is contents: read only -- no pages:write, no
+#     id-token: write, so even if a deploy step were ever added here by
+#     mistake, the GITHUB_TOKEN would lack the scope to use it.
+#   - no environment: github-pages block, no actions/configure-pages,
+#     actions/upload-pages-artifact, or actions/deploy-pages step.
+#   - triggers only on pull_request and manual workflow_dispatch --
+#     never on push to any branch (deploy.yml already owns push to the
+#     default branch; this workflow does not touch that trigger at all).
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run tests
+        run: npm test
