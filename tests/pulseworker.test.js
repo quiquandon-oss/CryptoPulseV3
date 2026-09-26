@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent, fetchExperimentRegistry } from '../api/pulseworker.js';
+import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent, fetchExperimentRegistry, fetchExperiment5Overview, fetchExperiment5Results } from '../api/pulseworker.js';
 
 function mockFetchOnce(handler) {
   const original = global.fetch;
@@ -253,6 +253,89 @@ test('fetchExperimentRegistry: HTTP error status -> explicit failure, not a fabr
   const restore = mockFetchOnce(async () => new Response('server error', { status: 500 }));
   try {
     const result = await fetchExperimentRegistry();
+    assert.equal(result.ok, false);
+    assert.match(result.error, /500/);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Overview: hits /api/research-lab/experiment5-overview', async () => {
+  let requestedUrl = null;
+  const restore = mockFetchOnce(async (url) => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({ ok: true, activated: false, reason: 'not applied' }), { status: 200 });
+  });
+  try {
+    await fetchExperiment5Overview();
+    assert.match(String(requestedUrl), /\/api\/research-lab\/experiment5-overview$/);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Overview: activated:false is a valid, passed-through response, never treated as an error', async () => {
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({
+    ok: true, activated: false, reason: 'Experiment 5 migrations are not yet applied to production D1.',
+  }), { status: 200 }));
+  try {
+    const result = await fetchExperiment5Overview();
+    assert.equal(result.ok, true);
+    assert.equal(result.activated, false);
+    assert.match(result.reason, /not yet applied/);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Overview: real activated data (counts + narrative) passes through unmodified', async () => {
+  const payload = {
+    ok: true, activated: true,
+    archive: { n_observations: 10, latest_observation_ts: 1000 },
+    decisions: { proposed: 3, resolved: 1, passed: 1, failed: 0, inconclusive: 0 },
+    pending_breakdown: { not_yet_eligible: 1, eligible_awaiting_resolution: 1 },
+    narrative: ['10 sentiment observation(s) archived so far, most recently at 1970-01-01T00:00:01.000Z.'],
+  };
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify(payload), { status: 200 }));
+  try {
+    const result = await fetchExperiment5Overview();
+    assert.deepEqual(result, payload);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Overview: HTTP error status -> explicit failure, not a fabricated fallback', async () => {
+  const restore = mockFetchOnce(async () => new Response('server error', { status: 500 }));
+  try {
+    const result = await fetchExperiment5Overview();
+    assert.equal(result.ok, false);
+    assert.match(result.error, /500/);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Results: hits /api/research-lab/experiment5-results', async () => {
+  let requestedUrl = null;
+  const restore = mockFetchOnce(async (url) => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({ ok: true, activated: false, n_resolved: 0 }), { status: 200 });
+  });
+  try {
+    await fetchExperiment5Results();
+    assert.match(String(requestedUrl), /\/api\/research-lab\/experiment5-results$/);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Results: insufficient-sample response passes through, never upgraded to a claim', async () => {
+  const payload = {
+    ok: true, activated: true, n_resolved: 3, agent_accuracy: 0.667, agent_n: 3,
+    v1_baseline_accuracy: 0.333, v1_baseline_n: 3, min_sample_for_conclusion: 20,
+    sufficient_sample: false, note: 'Not enough validated observations to draw a reliable conclusion (3 of 20 minimum resolved).',
+  };
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify(payload), { status: 200 }));
+  try {
+    const result = await fetchExperiment5Results();
+    assert.deepEqual(result, payload);
+    assert.equal(result.sufficient_sample, false);
+  } finally { restore(); }
+});
+
+test('fetchExperiment5Results: HTTP error status -> explicit failure, not a fabricated fallback', async () => {
+  const restore = mockFetchOnce(async () => new Response('server error', { status: 500 }));
+  try {
+    const result = await fetchExperiment5Results();
     assert.equal(result.ok, false);
     assert.match(result.error, /500/);
   } finally { restore(); }
