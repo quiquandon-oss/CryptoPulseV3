@@ -34,10 +34,22 @@ function coerceFiniteNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Unlike coerceTimestamp (used for the row's own origin ts, required for
+// the row to be usable at all), a missing/invalid target_ts must not
+// make an otherwise-valid prediction unavailable -- it is enrichment for
+// cross-model cohort alignment (api/comparison.js), not a field every
+// existing caller of normalizePrediction depends on.
+function coerceOptionalTimestamp(value) {
+  if (value == null) return null;
+  const ms = typeof value === 'number' ? value : new Date(value).getTime();
+  return isValidTimestamp(ms) ? ms : null;
+}
+
 /**
  * @typedef {Object} Prediction
  * @property {boolean} available
  * @property {number} [ts]
+ * @property {number|null} [target_ts] - the timestamp this prediction's outcome resolves against, or null if the backend row didn't carry one (older rows, or a shape this adapter hasn't seen)
  * @property {'UP'|'DOWN'|null} [direction]
  * @property {number|null} [p_up] - raw backend probability, 0..1, or null if absent/invalid
  * @property {number|null} [confidence] - 0..100, derived from p_up when valid, otherwise a genuine backend `confidence` field, otherwise null. Never a hardcoded guess.
@@ -80,7 +92,9 @@ export function normalizePrediction(raw) {
     correct = direction === 'UP' === (Number(raw.realized_up) === 1);
   }
 
-  return { available: true, ts, direction, p_up: pUp, confidence, expectedMove, actualMove, correct };
+  const targetTs = coerceOptionalTimestamp(raw.target_ts);
+
+  return { available: true, ts, target_ts: targetTs, direction, p_up: pUp, confidence, expectedMove, actualMove, correct };
 }
 
 /**

@@ -1426,7 +1426,7 @@
     </div>
     <div id="experimentRegistrySection"><p class="text-xs text-[#718096]">Loading…</p></div>
 
-    <!-- COMPARISON (prepared architecture -- see loadComparisonPanel) -->
+    <!-- COMPARISON (see loadComparisonPanel + api/comparison.js) -->
     <section id="comparisonCard" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 mb-6 shadow-xs hover:shadow-md transition-shadow">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div class="flex items-center gap-2 flex-wrap">
@@ -1520,7 +1520,9 @@
   import * as PulseWorker from './api/pulseworker.js';
   import * as Validation from './api/validation.js';
   import { labelVariant } from './api/normalize.js';
+  import * as Comparison from './api/comparison.js';
   window.PulseAPI = { ...PulseWorker, ...Validation, labelVariant };
+  window.Comparison = Comparison;
 </script>
 <script>
 function toggleNote(btn, noteId){
@@ -1578,6 +1580,12 @@ let labChartInstances = { exp002: null, exp003: null };
 // Populated by loadExp004 (resolved BTC observation count per horizon) so
 // loadComparisonPanel can reuse it instead of issuing a second fetch.
 let labLastTimesFmResolved = { 12: 0, 24: 0 };
+// Populated by renderExp004Live/loadExp003 with the full rows those
+// functions already fetched, so loadComparisonPanel can reuse them
+// instead of issuing duplicate /research/timesfm-recent and
+// /challenger-recent requests.
+let labLastTimesFmForecasts = { 12: [], 24: [] };
+let labLastChallengerRows = [];
 // PulseWorkerV2's price/prediction data only changes on its 3-hour cron
 // cadence, and /chart-data (+ siblings) currently do an unbounded full-table
 // read on every call -- a 60s interval here was needlessly hammering D1 read
@@ -2579,7 +2587,7 @@ document.getElementById('refreshBtn').onclick = async () => {
 
 async function loadLab() {
   await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExp005(), loadExperimentRegistry()]);
-  loadComparisonPanel();
+  await loadComparisonPanel();
 }
 
 // Minimum resolved BTC observations, per horizon, before we'll call a
@@ -2799,6 +2807,7 @@ async function loadExp003() {
   researchEndpointStatus = true;
   renderDataIntegrityPanel();
   const rows = result.predictions;
+  labLastChallengerRows = rows;
 
   const ELIGIBILITY_BAR = 50;
   const isTriggered = r => r.momentum_triggered === 1 || r.momentum_triggered === true;
@@ -2930,9 +2939,13 @@ async function loadExp004() {
   if (!bodyEl) return;
   setLabStatus(statusEl, 'Loading…', 'warn');
 
+  // limit:100 (the backend's own max) rather than the 20-row default --
+  // the comparison panel below needs as many resolved rows as actually
+  // exist, not just whatever fits in the last 20 origin timestamps
+  // (some of which may still be pending).
   const [h12, h24] = await Promise.all([
-    PulseAPI.fetchTimesFmRecent(12),
-    PulseAPI.fetchTimesFmRecent(24),
+    PulseAPI.fetchTimesFmRecent(12, { limit: 100 }),
+    PulseAPI.fetchTimesFmRecent(24, { limit: 100 }),
   ]);
 
   if (!h12.ok && !h24.ok) {
@@ -2987,6 +3000,7 @@ function renderExp004Live(statusEl, bodyEl, byHorizon) {
 
   for (const horizon of [12, 24]) {
     labLastTimesFmResolved[horizon] = byHorizon[horizon]?.ok ? byHorizon[horizon].summary.resolved : 0;
+    labLastTimesFmForecasts[horizon] = byHorizon[horizon]?.ok ? byHorizon[horizon].forecasts : [];
   }
 
   if (total === 0) {
@@ -3274,36 +3288,153 @@ function renderRegistryCard(e) {
   </section>`;
 }
 
-// ---- Comparison panel: prepared architecture for k-NN vs Challenger vs
-// TimesFM on BTC 12h/24h. Reuses the same EXP-004 data this tab already
-// fetched (loadExp004 runs first in loadLab) rather than issuing new
-// requests. Shows only a data-availability state -- COLLECTING DATA /
-// INSUFFICIENT DATA / READY FOR EVALUATION -- never a computed metric
-// until TIMESFM_MIN_RESOLVED_FOR_EVAL resolved BTC observations exist,
-// per the explicit instruction not to build a leaderboard on 0 resolved
-// rows. ----
-function loadComparisonPanel() {
+// ---- Comparison panel: k-NN vs Challenger vs TimesFM on BTC 12h/24h.
+// Gated on TIMESFM_MIN_RESOLVED_FOR_EVAL resolved TimesFM observations
+// per horizon (k-NN/Challenger already have far more history, so
+// TimesFM is always the binding constraint) -- below that bar this
+// still shows only COLLECTING DATA / INSUFFICIENT DATA, never a metric
+// computed from too small a sample. Once the bar is met, this fetches
+// k-NN's own BTC chart data for that exact horizon (fetchChartData does
+// not depend on whichever horizon the main dashboard toggle currently
+// shows) and reuses the Challenger/TimesFM rows loadExp003/loadExp004
+// already fetched, then hands everything to Comparison.buildComparison
+// (api/comparison.js) for the actual directional-accuracy/MAE/RMSE/
+// disagreement-rate/common-cohort numbers -- this function only renders
+// what that pure module returns, it never computes a metric itself.
+//
+// Renders TWO distinct comparisons per horizon, never merged into one
+// table (2026-09 audit, point 5): "Individual model performance" is
+// each model's own full resolved history (different n per model,
+// different underlying cycles -- useful for "how much history does
+// each model have," not a fair head-to-head). "Common evaluation
+// cohort" restricts all three to the exact same shared target
+// timestamps (same n for every model) -- this is the fair, apples-to-
+// apples comparison, and it is usually a much smaller sample, so its
+// own denominator is always shown and it is labeled PRELIMINARY below
+// PRELIMINARY_SAMPLE_THRESHOLD rather than presented as a settled
+// result. ----
+function fmtPct1(v) {
+  return v == null ? '—' : `${(v * 100).toFixed(1)}%`;
+}
+function fmtErr(v) {
+  return v == null ? '—' : `${v.toFixed(2)}%`;
+}
+function modelStatsRow(m) {
+  return `
+    <tr class="border-b border-[#F0F0F0]">
+      <td class="py-1 pr-2 font-semibold">${m.model}</td>
+      <td class="py-1 pr-2 font-mono-data">${m.n}</td>
+      <td class="py-1 pr-2 font-mono-data">${fmtPct1(m.directionalAccuracy)}</td>
+      <td class="py-1 pr-2 font-mono-data" ${m.maeNote ? `title="${m.maeNote}"` : ''}>${m.mae != null ? fmtErr(m.mae) : (m.maeNote ? 'N/A' : '—')}</td>
+      <td class="py-1 font-mono-data" ${m.maeNote ? `title="${m.maeNote}"` : ''}>${m.rmse != null ? fmtErr(m.rmse) : (m.maeNote ? 'N/A' : '—')}</td>
+    </tr>`;
+}
+
+async function loadComparisonPanel() {
   const bodyEl = document.getElementById('comparisonBody');
   if (!bodyEl) return;
 
-  const rows = [12, 24].map(horizon => {
+  const gates = [12, 24].map(horizon => {
     const timesFmResolved = labLastTimesFmResolved[horizon] ?? 0;
-    let state, kind;
-    if (timesFmResolved === 0) { state = 'COLLECTING DATA'; kind = 'warn'; }
-    else if (timesFmResolved < TIMESFM_MIN_RESOLVED_FOR_EVAL) { state = 'INSUFFICIENT DATA'; kind = 'warn'; }
-    else { state = 'READY FOR EVALUATION'; kind = 'ok'; }
-    return { horizon, state, kind, timesFmResolved };
+    return { horizon, timesFmResolved, ready: timesFmResolved >= TIMESFM_MIN_RESOLVED_FOR_EVAL };
   });
 
-  bodyEl.innerHTML = `
+  // days:35 -- generous enough to cover TimesFM's own full resolved
+  // history (it accumulates roughly one BTC 12H/24H forecast per day;
+  // ~22 rows today spans about 3 weeks) so the common-cohort match
+  // below has every chance to find a nearby k-NN/Challenger
+  // observation, rather than silently shrinking the cohort because
+  // k-NN's own window was narrower than TimesFM's. Still a bounded
+  // window, not an unbounded scan.
+  const knnByHorizon = {};
+  await Promise.all(gates.filter(g => g.ready).map(async g => {
+    const result = await PulseAPI.fetchChartData('BTC', g.horizon, { days: 35 });
+    knnByHorizon[g.horizon] = result.ok ? result.predictions : [];
+  }));
+
+  const anyReady = gates.some(g => g.ready);
+  const introHtml = anyReady ? `
+    <p class="text-[0.65rem] text-[#718096] mb-3">${esc(Comparison.DIRECTION_CONVENTION_NOTE)}</p>
+    <p class="text-[0.65rem] font-semibold text-[#D68910] mb-3">These are observational metrics over a small, ongoing sample. They describe what has happened so far -- they are not a determination of which model performs better, and a low sample size (marked PRELIMINARY below) must not be read as one.</p>
+  ` : '';
+
+  bodyEl.innerHTML = introHtml + `
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      ${rows.map(r => `
-        <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
-          <p class="text-[0.65rem] uppercase tracking-wide text-[#718096] font-semibold mb-1">BTC · ${r.horizon}H</p>
-          <span class="status-badge ${r.kind === 'ok' ? 'status-ok' : 'status-warning'}">${r.state}</span>
-          <p class="text-[0.65rem] text-[#718096] mt-2">${r.timesFmResolved} of ${TIMESFM_MIN_RESOLVED_FOR_EVAL} resolved TimesFM observations needed. k-NN and Challenger already have far more resolved history, but a fair three-way comparison waits for TimesFM to reach the same bar.</p>
-        </div>
-      `).join('')}
+      ${gates.map(g => {
+        if (!g.ready) {
+          const state = g.timesFmResolved === 0 ? 'COLLECTING DATA' : 'INSUFFICIENT DATA';
+          return `
+            <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+              <p class="text-[0.65rem] uppercase tracking-wide text-[#718096] font-semibold mb-1">BTC · ${g.horizon}H</p>
+              <span class="status-badge status-warning">${state}</span>
+              <p class="text-[0.65rem] text-[#718096] mt-2">${g.timesFmResolved} of ${TIMESFM_MIN_RESOLVED_FOR_EVAL} resolved TimesFM observations needed. k-NN and Challenger already have far more resolved history, but a fair three-way comparison waits for TimesFM to reach the same bar.</p>
+            </div>
+          `;
+        }
+        const comparison = Comparison.buildComparison('BTC', g.horizon, {
+          knnPredictions: knnByHorizon[g.horizon] || [],
+          challengerRows: labLastChallengerRows,
+          timesFmForecasts: labLastTimesFmForecasts[g.horizon] || [],
+        });
+        const dupNote = [
+          comparison.dataIntegrity.knnDuplicatesRemoved && `${comparison.dataIntegrity.knnDuplicatesRemoved} duplicate k-NN row(s)`,
+          comparison.dataIntegrity.challengerDuplicatesRemoved && `${comparison.dataIntegrity.challengerDuplicatesRemoved} duplicate Challenger row(s)`,
+          comparison.dataIntegrity.timesFmDuplicatesRemoved && `${comparison.dataIntegrity.timesFmDuplicatesRemoved} duplicate TimesFM row(s)`,
+        ].filter(Boolean).join(', ');
+
+        const disagreementPreliminary = comparison.disagreement.nDays > 0 && comparison.disagreement.nDays < Comparison.PRELIMINARY_SAMPLE_THRESHOLD
+          ? ' <b>(PRELIMINARY -- small sample)</b>' : '';
+        const disagreementText = comparison.disagreement.disagreementRate == null
+          ? `Not enough UTC-day-aligned observations across all three models yet (${comparison.disagreement.nDays} of ${Comparison.MIN_ALIGNED_DAYS_FOR_DISAGREEMENT} needed).`
+          : `${fmtPct1(comparison.disagreement.disagreementRate)} of ${comparison.disagreement.nDays} UTC-day-aligned observations had at least one model disagree on direction.${disagreementPreliminary}`;
+
+        const cc = comparison.commonCohort;
+        const cohortPreliminary = cc.n > 0 && cc.n < Comparison.PRELIMINARY_SAMPLE_THRESHOLD ? ' <b>(PRELIMINARY -- small sample)</b>' : '';
+        const cohortBody = cc.n === 0
+          ? `<p class="text-[0.65rem] text-[#718096]">No common evaluation cohort yet -- no TimesFM target time has landed within tolerance of a matched k-NN and Challenger observation.</p>`
+          : `
+            <p class="text-[0.65rem] text-[#718096] mb-1">n = ${cc.n} target timestamps where all three models have a resolved forecast (matched within ${(Comparison.cohortToleranceMs(g.horizon) / 3600000).toFixed(1)}h of each other, TimesFM-anchored).${cohortPreliminary}</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-[#4A4A5E]">
+                <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
+                  <th class="py-1 pr-2">Model</th><th class="py-1 pr-2">n</th>
+                  <th class="py-1 pr-2">Dir. accuracy</th><th class="py-1 pr-2">MAE</th><th class="py-1">RMSE</th>
+                </tr></thead>
+                <tbody>
+                  ${modelStatsRow({ model: 'k-NN', n: cc.n, ...cc.knn })}
+                  ${modelStatsRow({ model: 'Challenger', n: cc.n, ...cc.challenger, maeNote: 'Challenger predicts a direction probability only -- no return-magnitude forecast.' })}
+                  ${modelStatsRow({ model: 'TimesFM', n: cc.n, ...cc.timesFm })}
+                </tbody>
+              </table>
+            </div>
+            <p class="text-[0.6rem] text-[#A0AEC0] mt-1">All three correct on the same observation: <b>${fmtPct1(cc.allThreeCorrectRate)}</b> of ${cc.n} -- a stricter, secondary figure, not the headline comparison above.</p>
+          `;
+
+        return `
+          <div class="p-3 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+            <p class="text-[0.65rem] uppercase tracking-wide text-[#718096] font-semibold mb-1">BTC · ${g.horizon}H</p>
+            <span class="status-badge status-ok">READY FOR EVALUATION</span>
+
+            <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold mt-3 mb-1">Individual model performance (full resolved history -- different n per model)</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-[#4A4A5E]">
+                <thead><tr class="border-b border-[#E2E8F0] text-left text-[#718096]">
+                  <th class="py-1 pr-2">Model</th><th class="py-1 pr-2">n</th>
+                  <th class="py-1 pr-2">Dir. accuracy</th><th class="py-1 pr-2">MAE</th><th class="py-1">RMSE</th>
+                </tr></thead>
+                <tbody>${comparison.models.map(modelStatsRow).join('')}</tbody>
+              </table>
+            </div>
+
+            <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold mt-3 mb-1">Common evaluation cohort (same target timestamps, same n for every model)</p>
+            ${cohortBody}
+
+            <p class="text-[0.65rem] text-[#718096] mt-3">Disagreement rate: ${disagreementText}</p>
+            <p class="text-[0.6rem] text-[#A0AEC0] mt-1">Challenger's MAE/RMSE are N/A -- it predicts a direction probability only, no return magnitude. MAE/RMSE are in percentage-return units (predicted vs. realized move).</p>
+            ${dupNote ? `<p class="text-[0.6rem] text-[#A0AEC0] mt-1">Data integrity: ${esc(dupNote)} removed before computing the figures above.</p>` : ''}
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
 }
