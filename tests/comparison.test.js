@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   computeKnnStats, computeChallengerStats, computeTimesFmStats,
   computeDisagreementRate, buildComparison, MIN_ALIGNED_DAYS_FOR_DISAGREEMENT,
+  cohortToleranceMs, dedupeByTargetTs, buildCommonCohort, computeCommonCohortStats,
+  PRELIMINARY_SAMPLE_THRESHOLD, DIRECTION_CONVENTION_NOTE,
 } from '../api/comparison.js';
 
 // ---- computeKnnStats ----
@@ -220,4 +222,200 @@ test('buildComparison: Challenger rows for a different horizon never leak into t
   const result = buildComparison('BTC', 12, { knnPredictions, challengerRows, timesFmForecasts });
   const challengerStats = result.models.find(m => m.model === 'Challenger');
   assert.equal(challengerStats.n, 0);
+});
+
+// ---- cohortToleranceMs ----
+
+test('cohortToleranceMs: 20% of the horizon, matching the backend\'s own resolution tolerance', () => {
+  assert.equal(cohortToleranceMs(12), 12 * 3600000 * 0.2);
+  assert.equal(cohortToleranceMs(24), 24 * 3600000 * 0.2);
+});
+
+// ---- dedupeByTargetTs ----
+
+test('dedupeByTargetTs: no duplicates -> all rows pass through, duplicatesRemoved 0', () => {
+  const rows = [{ target_ts: 1 }, { target_ts: 2 }, { target_ts: 3 }];
+  const result = dedupeByTargetTs(rows);
+  assert.equal(result.rows.length, 3);
+  assert.equal(result.duplicatesRemoved, 0);
+});
+
+test('dedupeByTargetTs: keeps the first-seen row per target_ts, drops the rest', () => {
+  const first = { target_ts: 5, tag: 'first' };
+  const rows = [first, { target_ts: 5, tag: 'second' }, { target_ts: 6, tag: 'third' }];
+  const result = dedupeByTargetTs(rows);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.duplicatesRemoved, 1);
+  assert.equal(result.rows[0].tag, 'first');
+});
+
+test('dedupeByTargetTs: a row with no target_ts is passed through, never discarded for lacking one', () => {
+  const rows = [{ target_ts: null, tag: 'no-key' }, { target_ts: 1 }];
+  const result = dedupeByTargetTs(rows);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.duplicatesRemoved, 0);
+});
+
+// ---- buildCommonCohort ----
+
+function knnRow(targetTs, overrides = {}) {
+  return { target_ts: targetTs, correct: true, expectedMove: 1, actualMove: 1, ...overrides };
+}
+function challengerRow(targetTs, overrides = {}) {
+  return { target_ts: targetTs, p_up_flat: 0.7, realized_up: 1, resolved_ts: targetTs + 1, ...overrides };
+}
+function timesFmRow(targetTs, overrides = {}) {
+  return { target_ts: targetTs, correct: true, absolute_error: 0.1, ...overrides };
+}
+
+test('buildCommonCohort: exact target_ts matches produce a triple', () => {
+  const knn = [knnRow(1000)];
+  const challenger = [challengerRow(1000)];
+  const timesFm = [timesFmRow(1000)];
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].targetTs, 1000);
+});
+
+test('buildCommonCohort: a match within tolerance but not exact still counts', () => {
+  const toleranceMs = cohortToleranceMs(12);
+  const knn = [knnRow(1000 + toleranceMs / 2)];
+  const challenger = [challengerRow(1000 - toleranceMs / 2)];
+  const timesFm = [timesFmRow(1000)];
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 1);
+});
+
+test('buildCommonCohort: a match just outside tolerance is excluded, not force-matched', () => {
+  const toleranceMs = cohortToleranceMs(12);
+  const knn = [knnRow(1000 + toleranceMs + 1)]; // 1ms past the tolerance boundary
+  const challenger = [challengerRow(1000)];
+  const timesFm = [timesFmRow(1000)];
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 0);
+});
+
+test('buildCommonCohort: missing Challenger match excludes the anchor entirely (never a 2-of-3 triple)', () => {
+  const knn = [knnRow(1000)];
+  const challenger = []; // no Challenger observation at all
+  const timesFm = [timesFmRow(1000)];
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 0);
+});
+
+test('buildCommonCohort: each k-NN/Challenger row is used by at most one anchor', () => {
+  const knn = [knnRow(1000)]; // only one k-NN row
+  const challenger = [challengerRow(1000), challengerRow(1005)];
+  const timesFm = [timesFmRow(999), timesFmRow(1001)]; // two anchors both near the same single k-NN row
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 1); // the second anchor cannot also claim the same k-NN row
+});
+
+test('buildCommonCohort: unresolved rows (no target_ts) never anchor or match', () => {
+  const knn = [knnRow(1000)];
+  const challenger = [challengerRow(1000)];
+  const timesFm = [{ target_ts: null, correct: true, absolute_error: 0.1 }];
+  const triples = buildCommonCohort(knn, challenger, timesFm, 12);
+  assert.equal(triples.length, 0);
+});
+
+// ---- computeCommonCohortStats ----
+
+test('computeCommonCohortStats: empty cohort -> n 0, all model blocks null, not fabricated', () => {
+  const result = computeCommonCohortStats([]);
+  assert.equal(result.n, 0);
+  assert.equal(result.knn, null);
+  assert.equal(result.challenger, null);
+  assert.equal(result.timesFm, null);
+  assert.equal(result.allThreeCorrectRate, null);
+});
+
+test('computeCommonCohortStats: all three models correct on every triple -> accuracy 1 for each, allThreeCorrectRate 1', () => {
+  const triples = [1, 2, 3].map(ts => ({
+    targetTs: ts, knn: knnRow(ts), challenger: challengerRow(ts), timesFm: timesFmRow(ts),
+  }));
+  const result = computeCommonCohortStats(triples);
+  assert.equal(result.n, 3);
+  assert.equal(result.knn.directionalAccuracy, 1);
+  assert.equal(result.challenger.directionalAccuracy, 1);
+  assert.equal(result.timesFm.directionalAccuracy, 1);
+  assert.equal(result.allThreeCorrectRate, 1);
+});
+
+test('computeCommonCohortStats: same n (denominator) for every model -- the whole point of the shared cohort', () => {
+  const triples = [1, 2, 3, 4, 5].map(ts => ({
+    targetTs: ts,
+    knn: knnRow(ts, { correct: ts % 2 === 0 }),
+    challenger: challengerRow(ts, { realized_up: ts % 2 === 0 ? 1 : 0 }), // p_up_flat 0.7 -> predicts UP; correct iff realized_up===1
+    timesFm: timesFmRow(ts, { correct: ts % 3 === 0 }),
+  }));
+  const result = computeCommonCohortStats(triples);
+  // Each model's accuracy denominator is n=5, even though each model
+  // disagrees on which specific rows it got right.
+  assert.equal(result.n, 5);
+  assert.equal(Math.round(result.knn.directionalAccuracy * 5), 2); // ts=2,4 -> 2 correct
+  assert.equal(Math.round(result.timesFm.directionalAccuracy * 5), 1); // ts=3 -> 1 correct
+});
+
+test('computeCommonCohortStats: allThreeCorrectRate is stricter than any single model\'s own accuracy', () => {
+  const triples = [
+    { targetTs: 1, knn: knnRow(1, { correct: true }), challenger: challengerRow(1, { realized_up: 1 }), timesFm: timesFmRow(1, { correct: false }) },
+    { targetTs: 2, knn: knnRow(2, { correct: true }), challenger: challengerRow(2, { realized_up: 1 }), timesFm: timesFmRow(2, { correct: true }) },
+  ];
+  const result = computeCommonCohortStats(triples);
+  assert.equal(result.knn.directionalAccuracy, 1); // k-NN got both right
+  assert.equal(result.allThreeCorrectRate, 0.5); // but only 1 of 2 had all three right together
+});
+
+test('computeCommonCohortStats: Challenger MAE/RMSE remain N/A even inside the common cohort', () => {
+  const triples = [{ targetTs: 1, knn: knnRow(1), challenger: challengerRow(1), timesFm: timesFmRow(1) }];
+  const result = computeCommonCohortStats(triples);
+  assert.equal(result.challenger.mae, null);
+  assert.equal(result.challenger.rmse, null);
+});
+
+test('computeCommonCohortStats: k-NN and TimesFM MAE/RMSE only use rows where a magnitude actually exists', () => {
+  const triples = [
+    { targetTs: 1, knn: knnRow(1, { expectedMove: null }), challenger: challengerRow(1), timesFm: timesFmRow(1) },
+    { targetTs: 2, knn: knnRow(2, { expectedMove: 3, actualMove: 1 }), challenger: challengerRow(2), timesFm: timesFmRow(2, { absolute_error: null }) },
+  ];
+  const result = computeCommonCohortStats(triples);
+  assert.equal(result.knn.maeN, 1); // only triple 2 has both expectedMove and actualMove
+  assert.equal(result.knn.mae, 2);
+  assert.equal(result.timesFm.maeN, 1); // only triple 1 has a non-null absolute_error
+});
+
+// ---- buildComparison: common-cohort integration ----
+
+test('buildComparison exposes commonCohort and dataIntegrity alongside the existing per-model stats', () => {
+  const knnPredictions = [knnRow(1000, { ts: 900, direction: 'UP' })];
+  const challengerRows = [{ coin: 'BTC', horizon_hours: 12, ts: 900, ...challengerRow(1000) }];
+  const timesFmForecasts = [{ ...timesFmRow(1000), ts: 900, direction: 'UP', resolved: true }];
+  const result = buildComparison('BTC', 12, { knnPredictions, challengerRows, timesFmForecasts });
+  assert.equal(result.commonCohort.n, 1);
+  assert.equal(result.commonCohort.knn.directionalAccuracy, 1);
+  assert.deepEqual(result.dataIntegrity, {
+    knnDuplicatesRemoved: 0, challengerDuplicatesRemoved: 0, timesFmDuplicatesRemoved: 0,
+  });
+});
+
+test('buildComparison\'s common cohort dedupes duplicate target_ts rows before matching', () => {
+  const knnPredictions = [knnRow(1000, { ts: 900 }), knnRow(1000, { ts: 901 })]; // duplicate target_ts
+  const challengerRows = [{ coin: 'BTC', horizon_hours: 12, ts: 900, ...challengerRow(1000) }];
+  const timesFmForecasts = [{ ...timesFmRow(1000), ts: 900, direction: 'UP', resolved: true }];
+  const result = buildComparison('BTC', 12, { knnPredictions, challengerRows, timesFmForecasts });
+  assert.equal(result.dataIntegrity.knnDuplicatesRemoved, 1);
+  assert.equal(result.commonCohort.n, 1); // still exactly one triple, not two
+});
+
+// ---- exported constants sanity ----
+
+test('PRELIMINARY_SAMPLE_THRESHOLD is a positive number the UI can compare n against', () => {
+  assert.ok(PRELIMINARY_SAMPLE_THRESHOLD > 0);
+});
+
+test('DIRECTION_CONVENTION_NOTE documents both the shared realized-outcome definition and the per-model predicted-direction difference', () => {
+  assert.match(DIRECTION_CONVENTION_NOTE, /realized return > 0/);
+  assert.match(DIRECTION_CONVENTION_NOTE, /p_up/);
+  assert.match(DIRECTION_CONVENTION_NOTE, /TimesFM/);
 });

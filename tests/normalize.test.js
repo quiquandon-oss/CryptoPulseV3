@@ -105,6 +105,23 @@ test('explicit correct field is honored as-is', () => {
   assert.equal(result.correct, false);
 });
 
+test('target_ts is exposed when the backend row carries one', () => {
+  const now = Date.now();
+  const result = normalizePrediction({ ts: now, target_ts: now + 12 * 3600000, p_up: 0.6 });
+  assert.equal(result.target_ts, now + 12 * 3600000);
+});
+
+test('missing target_ts is null, not a fabricated ts+horizon guess -- and does not make the row unavailable', () => {
+  const result = normalizePrediction({ ts: Date.now(), p_up: 0.6 });
+  assert.equal(result.available, true);
+  assert.equal(result.target_ts, null);
+});
+
+test('invalid target_ts (unparseable) is null, not thrown or coerced to NaN', () => {
+  const result = normalizePrediction({ ts: Date.now(), p_up: 0.6, target_ts: 'not-a-date-and-not-a-number' });
+  assert.equal(result.target_ts, null);
+});
+
 test('normalizeSelection: no variant name field at all -> unavailable, no "Original k-NN" guess', () => {
   const result = normalizeSelection({ ts: Date.now() });
   assert.equal(result.available, false);

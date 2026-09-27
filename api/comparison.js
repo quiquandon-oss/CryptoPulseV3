@@ -14,6 +14,39 @@
 // as TIMESFM_MIN_RESOLVED_FOR_EVAL in index.html.
 export const MIN_ALIGNED_DAYS_FOR_DISAGREEMENT = 3;
 
+// Below this many observations, the panel must still show the exact
+// number (never hide it), but the UI labels the figure PRELIMINARY
+// rather than presenting it as a settled result. Shared by the common
+// cohort's n and the disagreement rate's nDays -- both are "how many
+// shared observations back this number" questions, so one threshold
+// covers both rather than maintaining two separate magic numbers doing
+// the same job. There is no statistical basis for calling this an
+// "insufficient data" wall the way TIMESFM_MIN_RESOLVED_FOR_EVAL is for
+// the per-model gate, since a user explicitly asked to see the exact
+// denominator at any size; this only controls advisory UI language,
+// never whether a number is computed or displayed.
+export const PRELIMINARY_SAMPLE_THRESHOLD = 20;
+
+// Verified directly against each table's own resolution code (not
+// assumed): predictions.realized_up (backfillPredictions, worker.js),
+// challenger_predictions.realized_up (backfillChallengerPredictions,
+// worker.js) and experiment_4_timesfm.actual_direction
+// (exp004-timesfm/run_experiment.py resolve_pending) all define the
+// REALIZED/actual outcome the same way -- realized_return > 0 is UP,
+// otherwise DOWN. What differs, unavoidably, is how each model's own
+// PREDICTED direction is derived: k-NN and Challenger threshold a
+// probability (p_up / p_up_flat >= 0.5), while TimesFM thresholds the
+// sign of its own predicted percent return (predicted_return_pct > 0).
+// These are the models' own natural output types -- there is no way to
+// force them into one representation without fabricating a probability
+// TimesFM never produced, or a magnitude Challenger never produced.
+// Exported so the UI states this once, from a single source, rather
+// than re-describing it independently (and potentially inconsistently).
+export const DIRECTION_CONVENTION_NOTE =
+  'All three models\' actual/realized outcome is defined identically (realized return > 0 = UP). ' +
+  'Predicted direction is each model\'s own natural output: k-NN and Challenger threshold a probability ' +
+  '(p_up >= 0.5); TimesFM thresholds the sign of its predicted return (> 0).';
+
 function mean(xs) {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 }
@@ -138,26 +171,182 @@ function challengerToDirectionObs(rows, coin, horizonHours) {
     .map(r => ({ ts: r.ts, direction: r.p_up_flat >= 0.5 ? 'UP' : 'DOWN' }));
 }
 
+// Same 20%-of-horizon tolerance backfillPredictions/
+// backfillChallengerPredictions/resolve_pending() (worker.js,
+// exp004-timesfm/run_experiment.py) already use when matching a
+// target_ts to a realized price -- reused here as the alignment
+// tolerance for matching one model's target_ts to another's, so the
+// common cohort uses the same notion of "close enough to the same
+// target" the backend's own resolution logic already establishes,
+// rather than an independently invented number.
+export function cohortToleranceMs(horizonHours) {
+  return horizonHours * 3600000 * 0.2;
+}
+
+// Verified against production D1 (2026-09-27): predictions,
+// challenger_predictions and experiment_4_timesfm currently have zero
+// duplicate target_ts rows for BTC at either horizon. This is
+// nonetheless a real, disclosed data-integrity check, not a assumption
+// -- and a defensive guard against a future regression (e.g. a retried
+// write), not dead code. Keeps the FIRST-seen row per target_ts;
+// duplicatesRemoved is reported so callers/tests can see the check ran
+// and its result, rather than silently dropping rows.
+export function dedupeByTargetTs(rows) {
+  const seen = new Set();
+  const deduped = [];
+  let duplicatesRemoved = 0;
+  for (const r of rows || []) {
+    if (r.target_ts == null) { deduped.push(r); continue; } // nothing to key on -- pass through, not discarded
+    if (seen.has(r.target_ts)) { duplicatesRemoved++; continue; }
+    seen.add(r.target_ts);
+    deduped.push(r);
+  }
+  return { rows: deduped, duplicatesRemoved };
+}
+
+function findNearestIndex(targetTs, rows, usedSet, toleranceMs) {
+  let bestIndex = -1;
+  let bestDist = Infinity;
+  rows.forEach((r, i) => {
+    if (usedSet.has(i) || r.target_ts == null) return;
+    const dist = Math.abs(r.target_ts - targetTs);
+    if (dist <= toleranceMs && dist < bestDist) { bestDist = dist; bestIndex = i; }
+  });
+  return bestIndex;
+}
+
 /**
- * Bundles the three per-model stat blocks plus the disagreement rate
- * for one coin/horizon into the shape the comparison panel renders.
+ * Common evaluation cohort: the set of target timestamps where k-NN,
+ * Challenger AND TimesFM all have a RESOLVED forecast within
+ * cohortToleranceMs(horizonHours) of each other. TimesFM is the anchor
+ * series -- it is by far the sparsest of the three (see
+ * TIMESFM_MIN_RESOLVED_FOR_EVAL's own comment in index.html), so
+ * anchoring on it and searching the denser k-NN/Challenger series for a
+ * nearby match is the only direction that can produce real matches; the
+ * reverse would mostly fail since TimesFM has so few target timestamps
+ * to land near. Matching is transactional per anchor (a k-NN/Challenger
+ * row is only marked used once BOTH sides of a triple are found), so a
+ * near-miss on one side never wastes a row a later, better anchor could
+ * have used.
+ */
+export function buildCommonCohort(knnResolved, challengerResolved, timesFmResolved, horizonHours) {
+  const toleranceMs = cohortToleranceMs(horizonHours);
+  const usedKnn = new Set();
+  const usedChallenger = new Set();
+  const triples = [];
+  const anchors = (timesFmResolved || [])
+    .filter(f => f.target_ts != null)
+    .slice()
+    .sort((a, b) => a.target_ts - b.target_ts);
+  for (const anchor of anchors) {
+    const knnIndex = findNearestIndex(anchor.target_ts, knnResolved || [], usedKnn, toleranceMs);
+    if (knnIndex < 0) continue;
+    const challengerIndex = findNearestIndex(anchor.target_ts, challengerResolved || [], usedChallenger, toleranceMs);
+    if (challengerIndex < 0) continue;
+    usedKnn.add(knnIndex);
+    usedChallenger.add(challengerIndex);
+    triples.push({ targetTs: anchor.target_ts, knn: knnResolved[knnIndex], challenger: challengerResolved[challengerIndex], timesFm: anchor });
+  }
+  return triples;
+}
+
+function challengerCorrectRow(row) {
+  return (row.p_up_flat >= 0.5) === (Number(row.realized_up) === 1);
+}
+
+/**
+ * Per-model directional accuracy AND (where the model provides one)
+ * MAE/RMSE, computed ONLY on the shared common-cohort triples -- so all
+ * three numbers share the exact same n and the exact same underlying
+ * cycles, unlike each model's own independent full-history stats above.
+ * Also reports allThreeCorrectRate (how often every model was right on
+ * the same observation) as a secondary, clearly-labeled bonus figure --
+ * never presented as "the" three-way accuracy on its own.
+ */
+export function computeCommonCohortStats(triples) {
+  const n = triples.length;
+  if (n === 0) {
+    return { n: 0, knn: null, challenger: null, timesFm: null, allThreeCorrectRate: null };
+  }
+  const knnMagRows = triples.filter(t => t.knn.expectedMove != null && t.knn.actualMove != null);
+  const knnErrors = knnMagRows.map(t => t.knn.expectedMove - t.knn.actualMove);
+  const timesFmMagRows = triples.filter(t => t.timesFm.absolute_error != null);
+
+  const knnCorrect = t => t.knn.correct === true;
+  const challengerCorrect = t => challengerCorrectRow(t.challenger);
+  const timesFmCorrect = t => t.timesFm.correct === true;
+
+  return {
+    n,
+    knn: {
+      directionalAccuracy: triples.filter(knnCorrect).length / n,
+      maeN: knnMagRows.length,
+      mae: knnMagRows.length ? mean(knnErrors.map(Math.abs)) : null,
+      rmse: knnMagRows.length ? Math.sqrt(mean(knnErrors.map(e => e * e))) : null,
+    },
+    challenger: {
+      directionalAccuracy: triples.filter(challengerCorrect).length / n,
+      maeN: 0,
+      mae: null,
+      rmse: null,
+    },
+    timesFm: {
+      directionalAccuracy: triples.filter(timesFmCorrect).length / n,
+      maeN: timesFmMagRows.length,
+      mae: timesFmMagRows.length ? mean(timesFmMagRows.map(t => t.timesFm.absolute_error)) : null,
+      rmse: timesFmMagRows.length ? Math.sqrt(mean(timesFmMagRows.map(t => t.timesFm.absolute_error ** 2))) : null,
+    },
+    allThreeCorrectRate: triples.filter(t => knnCorrect(t) && challengerCorrect(t) && timesFmCorrect(t)).length / n,
+  };
+}
+
+/**
+ * Bundles the three per-model stat blocks (each model's own full
+ * resolved history), the common-cohort comparison (all three restricted
+ * to the same shared observations), and the disagreement rate for one
+ * coin/horizon into the shape the comparison panel renders.
  * `knnPredictions` is Prediction[] for this exact horizon (from
  * fetchChartData), `challengerRows` is the raw /challenger-recent rows
  * (any coin/horizon -- filtered internally), `timesFmForecasts` is
  * TimesFmForecast[] for this exact horizon (from fetchTimesFmRecent).
  */
 export function buildComparison(coin, horizonHours, { knnPredictions, challengerRows, timesFmForecasts }) {
-  const knnStats = computeKnnStats(knnPredictions);
-  const challengerStats = computeChallengerStats(challengerRows, coin, horizonHours);
-  const timesFmStats = computeTimesFmStats(timesFmForecasts);
+  const challengerForHorizon = (challengerRows || []).filter(r => r.coin === coin && r.horizon_hours === horizonHours);
 
-  const knnObs = (knnPredictions || []).filter(p => p.direction != null && p.ts != null)
+  const knnDedup = dedupeByTargetTs(knnPredictions);
+  const challengerDedup = dedupeByTargetTs(challengerForHorizon);
+  const timesFmDedup = dedupeByTargetTs(timesFmForecasts);
+
+  const knnStats = computeKnnStats(knnDedup.rows);
+  const challengerStats = computeChallengerStats(challengerDedup.rows, coin, horizonHours);
+  const timesFmStats = computeTimesFmStats(timesFmDedup.rows);
+
+  const knnObs = knnDedup.rows.filter(p => p.direction != null && p.ts != null)
     .map(p => ({ ts: p.ts, direction: p.direction }));
-  const challengerObs = challengerToDirectionObs(challengerRows, coin, horizonHours);
-  const timesFmObs = (timesFmForecasts || []).filter(f => f.direction != null && f.ts != null)
+  const challengerObs = challengerToDirectionObs(challengerDedup.rows, coin, horizonHours);
+  const timesFmObs = timesFmDedup.rows.filter(f => f.direction != null && f.ts != null)
     .map(f => ({ ts: f.ts, direction: f.direction }));
 
   const disagreement = computeDisagreementRate(knnObs, challengerObs, timesFmObs);
 
-  return { coin, horizonHours, models: [knnStats, challengerStats, timesFmStats], disagreement };
+  const knnResolved = knnDedup.rows.filter(p => p.correct === true || p.correct === false);
+  const challengerResolved = challengerDedup.rows.filter(r =>
+    r.resolved_ts != null && r.realized_up != null && r.p_up_flat != null
+  );
+  const timesFmResolved = timesFmDedup.rows.filter(f => f.resolved && (f.correct === true || f.correct === false));
+  const commonCohortTriples = buildCommonCohort(knnResolved, challengerResolved, timesFmResolved, horizonHours);
+  const commonCohort = computeCommonCohortStats(commonCohortTriples);
+
+  return {
+    coin,
+    horizonHours,
+    models: [knnStats, challengerStats, timesFmStats],
+    disagreement,
+    commonCohort,
+    dataIntegrity: {
+      knnDuplicatesRemoved: knnDedup.duplicatesRemoved,
+      challengerDuplicatesRemoved: challengerDedup.duplicatesRemoved,
+      timesFmDuplicatesRemoved: timesFmDedup.duplicatesRemoved,
+    },
+  };
 }
