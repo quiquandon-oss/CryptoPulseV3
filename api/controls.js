@@ -15,8 +15,9 @@ import { fetchWithTimeout } from './pulseworker.js';
 
 export const JOB_REPO = Object.freeze({ owner: 'quiquandon-oss', repo: 'PulseWorkerV2', ref: 'main' });
 export const GITHUB_API = 'https://api.github.com';
-// Set only when a protected server-side dispatcher exists (see docs/RESEARCH_CONTROLS.md). Never a token.
-export const DISPATCH_ENDPOINT = null;
+// Server-side dispatcher (PulseWorkerV2 dispatcher/, Worker cryptopulse-research-dispatcher). It holds the
+// GitHub credential; V3 only sends the owner key the owner types in, and only to this origin.
+export const DISPATCH_ENDPOINT = 'https://cryptopulse-research-dispatcher.quiquandon.workers.dev';
 export const PENDING_DISPATCH_WINDOW_MS = 10 * 60000;
 
 /**
@@ -30,7 +31,8 @@ export const PENDING_DISPATCH_WINDOW_MS = 10 * 60000;
 export const JOBS = Object.freeze([
   { id: 'prediction-freshness-check', workflow: 'prediction-freshness-check.yml', name: 'V2 persistence check',
     purpose: 'Reads /prediction-freshness, V1 /hl-oi and the experiment registry (public endpoints). No secrets, writes nothing.',
-    schedule: null, policy: 'ELIGIBLE', pinned: 'workflow file on main', affects: ['dataQuality'] },
+    schedule: null, policy: 'ELIGIBLE', pinned: 'workflow file on main', affects: ['dataQuality'],
+    dispatch: { via: 'dispatcher', workflowId: 381092876, ref: 'main (fixed by the dispatcher; cannot be changed from V3)', inputs: 'None permitted' } },
   { id: 'exp23-forward-evaluation', workflow: 'exp23-forward-evaluation.yml', name: 'EXP-23 forward evaluation',
     purpose: 'Daily forward evaluation of the BTC 12-hour early-warning spec v0.4.0; writes only research-data/exp23-evaluation.',
     schedule: '10 12 * * *', policy: 'SCHEDULE_ONLY', pinned: '111eea180f897ecf5eff2df2316e45c842ef00d6',
@@ -245,5 +247,66 @@ export async function fetchRuns({ etag = null, perPage = 60, apiBase = GITHUB_AP
     return { ok: true, notModified: false, etag: res.headers.get('etag'), runs, rate };
   } catch (e) {
     return { ok: false, error: e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e) };
+  }
+}
+
+// ---- dispatcher adapter ------------------------------------------------------
+
+const DISPATCH_ERRORS = {
+  unauthorized: 'The owner dispatch key was rejected. Check the key; repeated failures are rate-limited.',
+  rate_limited: 'Rate limited by the dispatcher.',
+  conflict: 'A run of this job is already active.',
+  dispatch_disabled: 'Dispatch is disabled: the dispatcher secrets are not provisioned.',
+  job_not_allowed: 'This job is not allowlisted on the dispatcher.',
+  origin_not_allowed: 'The dispatcher refused this page\'s origin.',
+  upstream_auth: 'GitHub rejected the dispatcher\'s credential (expired or insufficient permission).',
+  upstream_rate_limited: 'GitHub\'s API rate limit was reached.',
+  upstream_timeout: 'GitHub did not respond in time.',
+  upstream_not_found: 'GitHub did not find the allowlisted workflow.',
+  upstream_rejected: 'GitHub rejected the dispatch.',
+  workflow_mismatch: 'The allowlisted workflow is missing, renamed or disabled on GitHub.',
+};
+
+/** Dispatcher health: whether live dispatch is enabled. Public, no credential. */
+export async function fetchDispatcherHealth({ base = DISPATCH_ENDPOINT } = {}) {
+  if (!base) return { ok: false, error: 'no dispatcher configured' };
+  try {
+    const res = await fetchWithTimeout(`${base}/health`, { timeoutMs: 8000 });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const b = await res.json();
+    return { ok: true, enabled: b.dispatch_enabled === true, version: typeof b.version === 'string' ? b.version : null, jobs: Array.isArray(b.jobs) ? b.jobs : [] };
+  } catch (e) {
+    return { ok: false, error: e && e.name === 'AbortError' ? 'timeout' : 'dispatcher unreachable' };
+  }
+}
+
+/**
+ * Ask the dispatcher to start an allowlisted job. Sends only {job, confirm, request_id}; the owner key goes in the
+ * Authorization header to the dispatcher origin only. An accepted result means GitHub accepted the dispatch -- the
+ * run is not started until GitHub lists it.
+ */
+export async function dispatchJob(jobId, ownerKey, { base = DISPATCH_ENDPOINT, requestId } = {}) {
+  if (!base) return { ok: false, code: 'no_dispatcher', message: 'No dispatcher configured.' };
+  if (!ownerKey) return { ok: false, code: 'unauthorized', message: 'Enter the owner dispatch key first.' };
+  try {
+    const res = await fetchWithTimeout(`${base}/dispatch`, {
+      method: 'POST', timeoutMs: 20000,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerKey}` },
+      body: JSON.stringify({ job: jobId, confirm: true, ...(requestId ? { request_id: requestId } : {}) }),
+    });
+    let b = null;
+    try { b = await res.json(); } catch (_) { b = null; }
+    if (res.status === 202 && b && b.status === 'accepted') {
+      return { ok: true, status: 'accepted', dispatchId: b.dispatch_id, acceptedAt: b.accepted_at, workflowId: b.workflow_id, ref: b.ref };
+    }
+    const code = (b && (b.reason === 'run_active' ? 'conflict' : b.code)) || `http_${res.status}`;
+    const retry = Number(res.headers.get('Retry-After'));
+    let message = DISPATCH_ERRORS[code] || (b && b.message) || `Dispatcher returned HTTP ${res.status}.`;
+    if (b && b.reason === 'run_active' && b.run_id) message = `Run #${b.run_id} is already active; no second run was started.`;
+    if (b && b.reason === 'dispatch_in_flight') message = 'A dispatch for this job is already in flight.';
+    if (Number.isFinite(retry) && retry > 0) message += ` Retry in ${retry} s.`;
+    return { ok: false, code, status: res.status, message, runId: b && b.run_id ? b.run_id : null };
+  } catch (e) {
+    return { ok: false, code: e && e.name === 'AbortError' ? 'timeout' : 'unreachable', message: e && e.name === 'AbortError' ? 'The dispatcher did not respond in time; the dispatch may or may not have been accepted — check the run list before retrying.' : 'The dispatcher could not be reached.' };
   }
 }

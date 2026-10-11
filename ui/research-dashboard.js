@@ -377,11 +377,23 @@ export function mergeSources(held, results, meta) {
  * @param {HTMLElement} root
  * @param {{ fetchers: object, fetchRuns?: Function, openUrl?: Function, onTab?: (tab:string)=>void, now?: Function }} opts
  */
-export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns, openUrl, onTab, now: clock = () => Date.now() } = {}) {
+const KEY_NAME = 'cp3_dispatch_key';
+const keyStore = {
+  get() { try { return sessionStorage.getItem(KEY_NAME) || localStorage.getItem(KEY_NAME) || null; } catch (_) { return null; } },
+  remembered() { try { return !!localStorage.getItem(KEY_NAME); } catch (_) { return false; } },
+  set(v, remember) { try { (remember ? localStorage : sessionStorage).setItem(KEY_NAME, v); (remember ? sessionStorage : localStorage).removeItem(KEY_NAME); } catch (_) { /* ignore */ } },
+  clear() { try { sessionStorage.removeItem(KEY_NAME); localStorage.removeItem(KEY_NAME); } catch (_) { /* ignore */ } },
+};
+const newRequestId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+
+export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns, dispatchJob = C.dispatchJob, fetchHealth = C.fetchDispatcherHealth,
+  openUrl, onTab, now: clock = () => Date.now() } = {}) {
   const state = { tab: 'overview', perf: 'direction', exp: 'all', model: null, loadedAt: 0, loading: null, error: null,
     sources: {}, seq: 0, lastSuccessAt: null, incidents: LS.get('cp3_dq_incidents', []),
     ctl: { runs: null, etag: null, lastPollAt: null, lastOkPollAt: null, pollError: null, rate: null,
-      pending: LS.get('cp3_research_pending', {}), audit: LS.get('cp3_research_audit', []), review: null, authInput: {}, lastExecutionRefresh: null },
+      pending: LS.get('cp3_research_pending', {}), audit: LS.get('cp3_research_audit', []), review: null, authInput: {}, lastExecutionRefresh: null,
+      dispatcher: null, healthAt: 0, keySet: !!keyStore.get(), keyRemembered: keyStore.remembered(), keyRememberChoice: false,
+      confirm: null, confirmAck: false, dispatching: null, lastDispatch: LS.get('cp3_last_dispatch', null) },
     timer: null, lastLoadAt: 0 };
   try { const t = localStorage.getItem('cp3_research_tab'); if (TABS.some(([k]) => k === t)) state.tab = t; } catch (_) { /* ignore */ }
 
@@ -413,18 +425,27 @@ export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns
     LS.set('cp3_research_audit', state.ctl.audit);
   }
 
+  let keyDraft = '';
   root.addEventListener('click', (ev) => {
+    const link = ev.target.closest('a[data-rd-ghpage]');
+    if (link && root.contains(link)) { githubPageRequested(link.dataset.rdGhpage); return; }
     const t = ev.target.closest('button');
     if (!t || !root.contains(t) || t.disabled) return;
     if (t.dataset.rdTab) { state.tab = t.dataset.rdTab; try { localStorage.setItem('cp3_research_tab', state.tab); } catch (_) { /* ignore */ } render(); }
     else if (t.dataset.rdPerf) { state.perf = t.dataset.rdPerf; render(); }
     else if (t.dataset.rdExp) { state.exp = t.dataset.rdExp; render(); }
-    else if (t.dataset.rdRun) runNow(t.dataset.rdRun);
+    else if (t.dataset.rdConfirm) { state.ctl.confirm = state.ctl.confirm === t.dataset.rdConfirm ? null : t.dataset.rdConfirm; state.ctl.confirmAck = false; render(); }
+    else if (t.dataset.rdLaunch) launch(t.dataset.rdLaunch);
+    else if (t.dataset.rdKeySave) { if (keyDraft.trim().length >= 24) { keyStore.set(keyDraft.trim(), state.ctl.keyRememberChoice); state.ctl.keySet = true; state.ctl.keyRemembered = state.ctl.keyRememberChoice; } keyDraft = ''; render(); }
+    else if (t.dataset.rdKeyForget) { keyStore.clear(); state.ctl.keySet = false; state.ctl.keyRemembered = false; render(); }
     else if (t.dataset.rdReview) { state.ctl.review = state.ctl.review === t.dataset.rdReview ? null : t.dataset.rdReview; render(); }
     else if (t.dataset.rdAuthorize) authorize(t.dataset.rdAuthorize);
   });
   root.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.dataset.rdKeyinput) { keyDraft = el.value; return; } // never stored or rendered until "Use this key"
+    if (el.dataset.rdKeyremember) { state.ctl.keyRememberChoice = el.checked; return; }
+    if (el.dataset.rdConfirmack) { state.ctl.confirmAck = el.checked; render(); return; }
     const id = el.dataset.rdPhrase || el.dataset.rdAck;
     if (!id) return;
     const cur = state.ctl.authInput[id] || {};
@@ -432,17 +453,48 @@ export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns
     render();
   });
 
-  function runNow(jobId) {
+  /** Fallback while live dispatch is unavailable: the owner opened GitHub's Run workflow page. */
+  function githubPageRequested(jobId) {
     const job = C.JOBS.find(j => j.id === jobId);
-    const el = job && C.eligibility(job, state.ctl.runs || [], state.ctl.pending, clock());
-    if (!job || !el || !el.canRun || job.policy !== 'ELIGIBLE') return;
-    const url = C.dispatchUrl(job);
-    (openUrl || ((u) => window.open(u, '_blank', 'noopener')))(url);
+    if (!job) return;
     state.ctl.pending = { ...state.ctl.pending, [job.id]: clock() };
     LS.set('cp3_research_pending', state.ctl.pending);
     audit({ kind: 'manual-request', job: job.id, workflow: job.workflow, trigger: 'Manual', result: 'Opened GitHub Run workflow page; not yet confirmed by GitHub' });
     schedulePoll(5000);
+  }
+
+  async function launch(jobId) {
+    const job = C.JOBS.find(j => j.id === jobId);
+    const el = job && C.eligibility(job, state.ctl.runs || [], state.ctl.pending, clock());
+    const key = keyStore.get();
+    if (!job || job.policy !== 'ELIGIBLE' || !el || !el.canRun || !state.ctl.confirmAck || !key || state.ctl.dispatching) return;
+    if (!(state.ctl.dispatcher && state.ctl.dispatcher.ok && state.ctl.dispatcher.enabled)) return;
+    state.ctl.dispatching = job.id; render();
+    const res = await dispatchJob(job.id, key, { requestId: newRequestId() });
+    state.ctl.dispatching = null; state.ctl.confirm = null; state.ctl.confirmAck = false;
+    if (res.ok) {
+      state.ctl.pending = { ...state.ctl.pending, [job.id]: res.acceptedAt || clock() };
+      state.ctl.lastDispatch = { jobId: job.id, dispatchId: res.dispatchId, acceptedAt: res.acceptedAt || clock(), runId: null };
+      audit({ kind: 'dispatch-accepted', job: job.id, workflow: job.workflow, trigger: 'Manual', result: `Dispatcher: accepted by GitHub (dispatch ${String(res.dispatchId || '').slice(0, 8)}); run not yet listed` });
+    } else if (res.code === 'timeout') {
+      // Unknown outcome: watch for a run instead of allowing an immediate retry.
+      state.ctl.pending = { ...state.ctl.pending, [job.id]: clock() };
+      state.ctl.lastDispatch = { jobId: job.id, acceptedAt: clock(), runId: null, unknown: res.message };
+      audit({ kind: 'dispatch-unknown', job: job.id, workflow: job.workflow, result: res.message });
+    } else {
+      state.ctl.lastDispatch = { jobId: job.id, error: res.message, code: res.code, at: clock() };
+      if (res.code === 'unauthorized') { keyStore.clear(); state.ctl.keySet = false; state.ctl.keyRemembered = false; }
+      audit({ kind: 'dispatch-rejected', job: job.id, workflow: job.workflow, result: `${res.code}: ${res.message}` });
+    }
+    LS.set('cp3_research_pending', state.ctl.pending);
+    LS.set('cp3_last_dispatch', state.ctl.lastDispatch);
     render();
+    schedulePoll(4000);
+  }
+
+  async function checkHealth() {
+    state.ctl.healthAt = clock();
+    state.ctl.dispatcher = await fetchHealth();
   }
 
   function authorize(jobId) {
@@ -507,6 +559,7 @@ export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns
   async function poll() {
     state.timer = null;
     const t = clock();
+    if (!state.ctl.dispatcher || clock() - state.ctl.healthAt > POLL_IDLE_MS) await checkHealth();
     const res = await fetchRuns({ etag: state.ctl.etag });
     state.ctl.lastPollAt = t;
     if (!res.ok) { state.ctl.pollError = res.error; render(); schedulePoll(); return; }
@@ -518,6 +571,8 @@ export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns
         const job = C.JOBS.find(j => j.id === jobId);
         const seen = job && C.runsFor(job, res.runs).find(r => r.event === 'workflow_dispatch' && r.created_at >= since - 60000);
         if (seen) {
+          const ld = state.ctl.lastDispatch;
+          if (ld && ld.jobId === jobId && !ld.runId && !ld.error) { state.ctl.lastDispatch = { ...ld, runId: seen.id, runUrl: seen.url, unknown: null }; LS.set('cp3_last_dispatch', state.ctl.lastDispatch); }
           audit({ kind: 'run-confirmed', job: jobId, workflow: job.workflow, run_id: seen.id, trigger: 'Manual', head_sha: seen.head_sha, result: `GitHub lists run #${seen.id} (${C.runState(seen).toLowerCase()})` });
           const { [jobId]: _drop, ...rest } = state.ctl.pending; state.ctl.pending = rest;
         } else if (t - since > C.PENDING_DISPATCH_WINDOW_MS) {
@@ -552,5 +607,5 @@ export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns
 
   render();
   schedulePoll(0);
-  return { load, render, state, poll };
+  return { load, render, state, poll, launchForTest: launch };
 }

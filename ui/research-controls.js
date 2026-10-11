@@ -92,14 +92,53 @@ function jobCard(job, ctl, now) {
   ];
   let action = '';
   if (job.policy === 'ELIGIBLE') {
-    action = `<button type="button" class="rd-btn" data-rd-run="${esc(job.id)}" ${el.canRun ? '' : 'disabled'}>Run now on GitHub ↗</button>
-      <p class="rd-foot">Opens GitHub's Run workflow page; your GitHub sign-in starts it. V3 shows the run as started only once GitHub lists it.</p>`;
+    action = renderDispatchAction(job, ctl, el);
   } else if (job.policy === 'PROTECTED') {
     action = `<button type="button" class="rd-btn rd-btn-ghost" data-rd-review="${esc(job.id)}">${ctl.review === job.id ? 'Close review' : 'Review and authorize'}</button>${ctl.review === job.id ? renderReview(job, ctl) : ''}`;
   }
   return `<article class="rd-src rd-job" data-job="${esc(job.id)}">
     <div class="rd-row rd-wrap"><p class="rd-src-t">${esc(job.name)}</p>${badge(plabel, pcls)}</div>
     <p class="rd-sub">${esc(job.purpose)}</p>${kv(rows)}${action}</article>`;
+}
+
+/** Dispatcher readiness for the UI, from GET /health (public). */
+export function dispatcherReadiness(ctl) {
+  const d = ctl.dispatcher;
+  if (!d) return { ready: false, label: 'Checking the dispatcher…' };
+  if (!d.ok) return { ready: false, label: `Dispatcher unreachable (${d.error}). Live dispatch is unavailable.` };
+  if (!d.enabled) return { ready: false, label: 'Dispatcher deployed, but live dispatch is disabled: its secrets are not provisioned (dispatcher/README.md).' };
+  return { ready: true, label: `Dispatcher ready${d.version ? ` (version ${String(d.version).slice(0, 7)})` : ''}.` };
+}
+
+export function renderDispatchAction(job, ctl, el) {
+  const r = dispatcherReadiness(ctl);
+  const d = job.dispatch || {};
+  const ld = ctl.lastDispatch && ctl.lastDispatch.jobId === job.id ? ctl.lastDispatch : null;
+  const busy = ctl.dispatching === job.id;
+  let lastLine = '';
+  if (ld) {
+    if (ld.error) lastLine = `<p class="rd-sub rd-errs">Dispatch not accepted: ${esc(ld.error)}</p>`;
+    else if (ld.runId) lastLine = `<p class="rd-sub">Dispatch accepted ${esc(dt(ld.acceptedAt))}. <b>Run <a href="${esc(ld.runUrl || '#')}" target="_blank" rel="noopener">#${esc(ld.runId)}</a> verified on GitHub</b>; its status is shown above.</p>`;
+    else if (ld.unknown) lastLine = `<p class="rd-sub rd-errs">${esc(ld.unknown)}</p>`;
+    else lastLine = `<p class="rd-sub">Dispatch accepted by GitHub at ${esc(dt(ld.acceptedAt))} (dispatch ${esc(String(ld.dispatchId || '').slice(0, 8))}). <b>Not started yet</b> — waiting for GitHub to list the run.</p>`;
+  }
+  const keyBlock = ctl.keySet
+    ? `<p class="rd-muted">Owner dispatch key set ${ctl.keyRemembered ? 'on this device' : 'for this browser session'}. <button type="button" class="rd-linkbtn" data-rd-key-forget="1">Forget key</button></p>`
+    : `<label class="rd-field">Owner dispatch key<input type="password" data-rd-keyinput="1" autocomplete="off" spellcheck="false" placeholder="paste the owner key"></label>
+       <label class="rd-check"><input type="checkbox" data-rd-keyremember="1" ${ctl.keyRememberChoice ? 'checked' : ''}> Remember on this device (otherwise kept for this session only)</label>
+       <button type="button" class="rd-btn rd-btn-ghost" data-rd-key-save="1">Use this key</button>`;
+  const confirmOpen = ctl.confirm === job.id;
+  const confirmPanel = confirmOpen ? `<div class="rd-review">
+      ${kv([['Job', esc(job.name)], ['Workflow', `<code>${esc(job.workflow)}</code> · id ${esc(d.workflowId)}`], ['Branch / commit', esc(d.ref)], ['Inputs', esc(d.inputs)], ['Repository', 'quiquandon-oss/PulseWorkerV2 (fixed)']])}
+      <label class="rd-check"><input type="checkbox" data-rd-confirmack="${esc(job.id)}" ${ctl.confirmAck ? 'checked' : ''}> Start this job now.</label>
+      <button type="button" class="rd-btn" data-rd-launch="${esc(job.id)}" ${ctl.confirmAck && el.canRun && r.ready && ctl.keySet && !busy ? '' : 'disabled'}>${busy ? 'Dispatching…' : 'Launch'}</button>
+      <button type="button" class="rd-btn rd-btn-ghost" data-rd-confirm="${esc(job.id)}">Cancel</button></div>` : '';
+  return `<p class="rd-muted rd-mt">${esc(r.label)}</p>
+    ${r.ready ? keyBlock : ''}
+    ${r.ready ? `<button type="button" class="rd-btn" data-rd-confirm="${esc(job.id)}" ${el.canRun && ctl.keySet && !confirmOpen ? '' : 'disabled'}>Run now</button>${confirmPanel}` : ''}
+    ${lastLine}
+    ${!r.ready && job.workflow ? `<p class="rd-foot">Alternative while live dispatch is unavailable: <a href="${esc(C.dispatchUrl(job))}" target="_blank" rel="noopener" data-rd-ghpage="${esc(job.id)}">start it on GitHub ↗</a> (your GitHub sign-in starts it).</p>` : ''}
+    <p class="rd-foot">"Accepted" means GitHub accepted the dispatch; the run counts as started only once GitHub lists it.</p>`;
 }
 
 export function renderReview(job, ctl) {

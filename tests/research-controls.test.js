@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountResearchDashboard, mergeSources, buildModel, renderOverview } from '../ui/research-dashboard.js';
-import { renderControls, summarizeExecution, summarizeModelChange } from '../ui/research-controls.js';
+import { renderControls, renderDispatchAction, summarizeExecution, summarizeModelChange } from '../ui/research-controls.js';
+import { JOBS } from '../api/controls.js';
 import { acceptSource } from '../api/dataquality.js';
 
 const H = 3600000;
@@ -11,9 +12,10 @@ const freshRows = (bad = {}) => ['BTC', 'ETH', 'LINK'].flatMap(coin => ['12', '2
 const run = (o) => ({ id: 77, workflow: 'prediction-freshness-check.yml', name: 'Prediction Freshness Check', event: 'workflow_dispatch', status: 'completed', conclusion: 'success', created_at: clock - 60000, updated_at: clock, head_sha: 'dff12ccd94', url: 'https://github.com/x', ...o });
 
 // minimal stand-ins for the DOM the mount uses; timers are captured, not run
-function harness({ fetchersOver = {}, runsScript }) {
+function harness({ fetchersOver = {}, runsScript, dispatchJob = async () => ({ ok: false, code: 'x', message: 'x' }), health = { ok: true, enabled: true, version: 'abc1234' } }) {
   globalThis.document = { hidden: false, activeElement: null };
-  globalThis.localStorage = { _m: new Map(), getItem(k) { return this._m.get(k) ?? null; }, setItem(k, v) { this._m.set(k, v); } };
+  const store = () => ({ _m: new Map(), getItem(k) { return this._m.get(k) ?? null; }, setItem(k, v) { this._m.set(k, String(v)); }, removeItem(k) { this._m.delete(k); } });
+  globalThis.localStorage = store(); globalThis.sessionStorage = store();
   const timers = [];
   globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
   globalThis.clearTimeout = () => {};
@@ -30,7 +32,7 @@ function harness({ fetchersOver = {}, runsScript }) {
     ...fetchersOver,
   };
   let k = 0;
-  const api = mountResearchDashboard(root, { fetchers, fetchRuns: async () => runsScript[Math.min(k++, runsScript.length - 1)], now: () => clock, openUrl: () => {} });
+  const api = mountResearchDashboard(root, { fetchers, fetchRuns: async () => runsScript[Math.min(k++, runsScript.length - 1)], dispatchJob, fetchHealth: async () => health, now: () => clock, openUrl: () => {} });
   return { api, root, loads, setFresh: (f) => { fresh = f; }, timers };
 }
 
@@ -106,9 +108,10 @@ test('execution, data quality and research outcome stay independent', () => {
 });
 
 test('Research controls render scheduled vs manual, disable duplicates, and keep protected launch blocked', () => {
-  const ctl = { runs: [run({ status: 'in_progress', conclusion: null }), run({ id: 5, workflow: 'exp23-forward-evaluation.yml', event: 'schedule' })], pending: {}, audit: [], lastPollAt: clock, lastOkPollAt: clock, review: 'market-moves-evaluation', authInput: {} };
+  const ctl = { runs: [run({ status: 'in_progress', conclusion: null }), run({ id: 5, workflow: 'exp23-forward-evaluation.yml', event: 'schedule' })], pending: {}, audit: [], lastPollAt: clock, lastOkPollAt: clock, review: 'market-moves-evaluation', authInput: {},
+    dispatcher: { ok: true, enabled: true, version: 'abc1234' }, keySet: true };
   const html = renderControls(ctl, clock);
-  assert.match(html, /data-rd-run="prediction-freshness-check" disabled/);
+  assert.match(html, /data-rd-confirm="prediction-freshness-check" disabled>Run now/);
   assert.match(html, /Manual · #77/); assert.match(html, /Scheduled · #5/);
   assert.match(html, /Needs owner authorization outside V3/);
   assert.match(html, /data-rd-authorize="market-moves-evaluation" disabled/);
@@ -123,4 +126,85 @@ test('summarizeModelChange lists changed and unchanged Overview fields', () => {
   const c = summarizeModelChange(a, b);
   assert.ok(c.changed.some(x => /Data quality: PROBLEM → HEALTHY/.test(x)) && c.changed.some(x => /Resolved predictions: 10 → 12/.test(x)));
   assert.ok(c.unchanged.includes('Research outcome') && c.unchanged.includes('Pending predictions'));
+});
+
+const job = JOBS.find(j => j.id === 'prediction-freshness-check');
+const el = { canRun: true };
+
+test('dispatch action: disabled or unreachable dispatcher shows why, no Run now, GitHub page only as a fallback', () => {
+  for (const d of [{ ok: true, enabled: false }, { ok: false, error: 'dispatcher unreachable' }]) {
+    const html = renderDispatchAction(job, { dispatcher: d }, el);
+    assert.doesNotMatch(html, /data-rd-confirm=/);
+    assert.match(html, d.ok ? /live dispatch is disabled/ : /Dispatcher unreachable/);
+    assert.match(html, /data-rd-ghpage="prediction-freshness-check"/);
+  }
+});
+
+test('dispatch action: key entry, explicit confirmation with job/branch/inputs, launch disabled until confirmed', () => {
+  const ready = { dispatcher: { ok: true, enabled: true, version: 'abc1234' } };
+  assert.match(renderDispatchAction(job, { ...ready, keySet: false }, el), /type="password" data-rd-keyinput/);
+  assert.match(renderDispatchAction(job, { ...ready, keySet: false }, el), /data-rd-confirm="prediction-freshness-check" disabled/);
+  const open = renderDispatchAction(job, { ...ready, keySet: true, confirm: job.id, confirmAck: false }, el);
+  assert.match(open, /prediction-freshness-check\.yml<\/code> · id 381092876/); assert.match(open, /main \(fixed by the dispatcher/); assert.match(open, /None permitted/);
+  assert.match(open, /data-rd-launch="prediction-freshness-check" disabled/);
+  assert.doesNotMatch(renderDispatchAction(job, { ...ready, keySet: true, confirm: job.id, confirmAck: true }, el), /data-rd-launch="prediction-freshness-check" disabled/);
+  assert.match(renderDispatchAction(job, { ...ready, keySet: true, confirm: job.id, confirmAck: true }, { canRun: false }), /data-rd-launch="prediction-freshness-check" disabled/);
+});
+
+test('dispatch action distinguishes accepted from started, and shows the verified run id', () => {
+  const ready = { dispatcher: { ok: true, enabled: true }, keySet: true };
+  const acc = renderDispatchAction(job, { ...ready, lastDispatch: { jobId: job.id, dispatchId: 'abcdef123', acceptedAt: clock, runId: null } }, el);
+  assert.match(acc, /Dispatch accepted by GitHub/); assert.match(acc, /Not started yet/); assert.doesNotMatch(acc, /verified on GitHub/);
+  const ver = renderDispatchAction(job, { ...ready, lastDispatch: { jobId: job.id, dispatchId: 'abcdef123', acceptedAt: clock, runId: 31415, runUrl: 'https://github.com/r/31415' } }, el);
+  assert.match(ver, /Run <a href="https:\/\/github.com\/r\/31415"[^>]*>#31415<\/a> verified on GitHub/);
+  assert.match(renderDispatchAction(job, { ...ready, lastDispatch: { jobId: job.id, error: 'GitHub rejected the dispatch.' } }, el), /Dispatch not accepted: GitHub rejected the dispatch/);
+});
+
+test('launch flow: accepted dispatch waits for GitHub, then the real run id is recorded and the Overview refreshes on completion', async () => {
+  let sent = null;
+  const h = harness({
+    dispatchJob: async (id, key, o) => { sent = { id, key, o }; return { ok: true, status: 'accepted', dispatchId: 'disp-1', acceptedAt: clock, workflowId: 381092876, ref: 'main' }; },
+    runsScript: [{ ok: true, runs: [] }, { ok: true, runs: [] }, { ok: true, runs: [run({ id: 9001, status: 'queued', conclusion: null, created_at: clock + 5000 })] }, { ok: true, runs: [run({ id: 9001, created_at: clock + 5000 })] }],
+  });
+  sessionStorage.setItem('cp3_dispatch_key', 'owner-key-0123456789-abcdefgh');
+  await h.api.poll();                                         // health + first observation
+  h.api.state.ctl.keySet = true; h.api.state.ctl.confirm = 'prediction-freshness-check'; h.api.state.ctl.confirmAck = true;
+  await h.api.launchForTest('prediction-freshness-check');
+  assert.equal(sent.id, 'prediction-freshness-check'); assert.equal(sent.key, 'owner-key-0123456789-abcdefgh');
+  assert.equal(h.api.state.ctl.lastDispatch.runId, null);     // accepted, not started
+  assert.ok(h.api.state.ctl.audit.some(a => a.kind === 'dispatch-accepted'));
+  await h.api.poll();                                         // GitHub has not listed it yet
+  assert.equal(h.api.state.ctl.lastDispatch.runId, null);
+  clock += 10000; await h.api.poll();                         // GitHub lists run 9001
+  assert.equal(h.api.state.ctl.lastDispatch.runId, 9001);
+  assert.ok(h.api.state.ctl.audit.some(a => a.kind === 'run-confirmed' && a.run_id === 9001));
+  clock += 60000; await h.api.poll();                         // run completes -> final Overview refresh
+  assert.equal(h.api.state.ctl.lastExecutionRefresh.runId, 9001);
+  assert.equal(h.api.state.ctl.lastExecutionRefresh.refreshOk, true);
+});
+
+test('launch flow: a rejected key is cleared and reported; nothing is shown as accepted', async () => {
+  const h = harness({ dispatchJob: async () => ({ ok: false, code: 'unauthorized', message: 'The owner dispatch key was rejected.' }), runsScript: [{ ok: true, runs: [] }] });
+  sessionStorage.setItem('cp3_dispatch_key', 'wrong-key-0123456789-abcdefgh');
+  await h.api.poll();
+  Object.assign(h.api.state.ctl, { keySet: true, confirm: 'prediction-freshness-check', confirmAck: true });
+  await h.api.launchForTest('prediction-freshness-check');
+  assert.equal(h.api.state.ctl.keySet, false); assert.equal(sessionStorage.getItem('cp3_dispatch_key'), null);
+  assert.match(h.api.state.ctl.lastDispatch.error, /rejected/);
+  assert.deepEqual(h.api.state.ctl.pending, {});
+});
+
+test('launch is refused while a run is active, without confirmation, or when the dispatcher is disabled', async () => {
+  let calls = 0;
+  for (const [over, health, runs] of [
+    [{ confirmAck: true }, { ok: true, enabled: true }, [run({ status: 'in_progress', conclusion: null })]],
+    [{ confirmAck: false }, { ok: true, enabled: true }, []],
+    [{ confirmAck: true }, { ok: true, enabled: false }, []]]) {
+    const h = harness({ dispatchJob: async () => { calls++; return { ok: true }; }, health, runsScript: [{ ok: true, runs }] });
+    sessionStorage.setItem('cp3_dispatch_key', 'owner-key-0123456789-abcdefgh');
+    await h.api.poll();
+    Object.assign(h.api.state.ctl, { keySet: true, confirm: 'prediction-freshness-check' }, over);
+    await h.api.launchForTest('prediction-freshness-check');
+  }
+  assert.equal(calls, 0);
 });

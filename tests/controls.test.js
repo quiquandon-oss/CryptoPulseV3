@@ -101,7 +101,51 @@ test('fetchRuns sends no credential, uses ETag, and handles 304 and rate limitin
   } finally { globalThis.fetch = orig; }
 });
 
-test('Run now uses GitHub\'s own workflow page; no dispatcher endpoint or token is configured', () => {
+test('dispatcher endpoint is the dedicated Worker; GitHub page stays only as a fallback link', () => {
+  assert.equal(C.DISPATCH_ENDPOINT, 'https://cryptopulse-research-dispatcher.quiquandon.workers.dev');
   assert.equal(C.dispatchUrl(job('prediction-freshness-check')), 'https://github.com/quiquandon-oss/PulseWorkerV2/actions/workflows/prediction-freshness-check.yml');
-  assert.equal(C.DISPATCH_ENDPOINT, null);
+  assert.deepEqual(job('prediction-freshness-check').dispatch.workflowId, 381092876);
+});
+
+function stubFetch(handler) { const calls = []; const orig = globalThis.fetch; globalThis.fetch = async (url, opts = {}) => { calls.push({ url, opts }); return handler(url, opts); }; return { calls, restore: () => { globalThis.fetch = orig; } }; }
+const resp = (status, body, headers = {}) => ({ status, ok: status >= 200 && status < 300, headers: { get: k => headers[k] ?? null }, json: async () => body });
+
+test('dispatchJob sends only job/confirm/request_id with the key to the dispatcher, and accepted is not started', async () => {
+  const f = stubFetch(() => resp(202, { ok: true, status: 'accepted', dispatch_id: 'd-1', accepted_at: NOW, workflow_id: 381092876, ref: 'main' }));
+  try {
+    const r = await C.dispatchJob('prediction-freshness-check', 'k'.repeat(32), { requestId: 'req-abcdefgh' });
+    assert.deepEqual(r, { ok: true, status: 'accepted', dispatchId: 'd-1', acceptedAt: NOW, workflowId: 381092876, ref: 'main' });
+    assert.equal(f.calls[0].url, 'https://cryptopulse-research-dispatcher.quiquandon.workers.dev/dispatch');
+    assert.deepEqual(JSON.parse(f.calls[0].opts.body), { job: 'prediction-freshness-check', confirm: true, request_id: 'req-abcdefgh' });
+    assert.equal(f.calls[0].opts.headers.Authorization, `Bearer ${'k'.repeat(32)}`);
+  } finally { f.restore(); }
+});
+
+test('dispatchJob maps auth, conflict, rate-limit, disabled, upstream and network failures to explicit errors', async () => {
+  const cases = [
+    [resp(401, { code: 'unauthorized' }), 'unauthorized', /rejected/],
+    [resp(409, { code: 'conflict', reason: 'run_active', run_id: 99 }), 'conflict', /Run #99 is already active/],
+    [resp(409, { code: 'conflict', reason: 'dispatch_in_flight' }), 'conflict', /already in flight/],
+    [resp(429, { code: 'rate_limited' }, { 'Retry-After': '90' }), 'rate_limited', /Retry in 90 s/],
+    [resp(503, { code: 'dispatch_disabled' }), 'dispatch_disabled', /not provisioned/],
+    [resp(502, { code: 'upstream_auth' }), 'upstream_auth', /credential/],
+    [resp(503, { code: 'upstream_rate_limited' }, { 'Retry-After': '60' }), 'upstream_rate_limited', /rate limit/],
+    [resp(504, { code: 'upstream_timeout' }), 'upstream_timeout', /did not respond/],
+  ];
+  for (const [r, code, msg] of cases) {
+    const f = stubFetch(() => r);
+    try { const out = await C.dispatchJob('prediction-freshness-check', 'k'.repeat(32)); assert.equal(out.ok, false); assert.equal(out.code, code); assert.match(out.message, msg); } finally { f.restore(); }
+  }
+  const net = stubFetch(() => { throw new TypeError('Failed to fetch'); });
+  try { assert.equal((await C.dispatchJob('prediction-freshness-check', 'k'.repeat(32))).code, 'unreachable'); } finally { net.restore(); }
+  const none = stubFetch(() => resp(500, {}));
+  try { const out = await C.dispatchJob('prediction-freshness-check', ''); assert.equal(out.code, 'unauthorized'); assert.equal(none.calls.length, 0); } finally { none.restore(); }
+});
+
+test('fetchDispatcherHealth reads enabled/version without a credential', async () => {
+  const f = stubFetch(() => resp(200, { ok: true, dispatch_enabled: false, version: 'abc1234def', jobs: ['prediction-freshness-check'] }));
+  try {
+    assert.deepEqual(await C.fetchDispatcherHealth(), { ok: true, enabled: false, version: 'abc1234def', jobs: ['prediction-freshness-check'] });
+    assert.equal(f.calls[0].opts.headers, undefined);
+  } finally { f.restore(); }
 });

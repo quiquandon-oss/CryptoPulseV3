@@ -1,7 +1,7 @@
 # Research Controls (Lab › Experiments)
 
-V3 is a static GitHub Pages site. It holds no credential and has no server. Research Controls
-therefore show **execution status from GitHub's public Actions API** for the public
+V3 is a static GitHub Pages site and holds no GitHub credential. Research Controls show
+**execution status from GitHub's public Actions API** for the public
 `quiquandon-oss/PulseWorkerV2` repository. That API needs no token, and V3 uses ETag requests,
 so an unchanged run list does not count against the 60-requests-per-hour limit.
 
@@ -31,16 +31,30 @@ Taken from the workflow files on PulseWorkerV2 `main` @ `dff12cc` on 2026-10-11.
 - The protected-evaluation review only supplies the plan sha256 that the evaluator itself
   requires.
 
-## How "Run now" works today
+## How "Run now" works
 
-For the one eligible job, V3 opens GitHub's own *Run workflow* page. The owner's GitHub sign-in
-is what authorizes the dispatch.
+V3 dispatches through the dedicated Worker **`cryptopulse-research-dispatcher`**
+(`https://cryptopulse-research-dispatcher.quiquandon.workers.dev`, source in PulseWorkerV2 `dispatcher/`). That
+Worker holds the GitHub credential server-side; see `dispatcher/README.md` there for the security model, API and
+secret provisioning.
 
-V3 then records the request locally as *not yet confirmed*. It shows the run as started only once
-GitHub lists a new `workflow_dispatch` run created after the request. If no run appears within
-10 minutes, it records that nothing was started.
+1. The owner enters the **owner dispatch key** once.
+   - It is kept in session storage, or in local storage only if "remember" is ticked.
+   - It is sent only to the dispatcher, in the `Authorization` header.
+   - It is never rendered or logged.
+2. **Run now** opens a confirmation showing the job, workflow file and ID, the fixed branch (`main`), the fixed
+   repository and that no inputs are accepted. **Launch** stays disabled until it is confirmed, while a run is
+   queued or running, or while the dispatcher is disabled or unreachable.
+3. The dispatcher returns `accepted`. V3 shows this as *accepted by GitHub, not started yet*. Only when GitHub's
+   public run list shows a new `workflow_dispatch` run does V3 mark it *verified*, with the real run ID and link.
+   Status then follows that run. If the dispatcher times out, the outcome is unknown, so V3 watches for a run
+   instead of allowing an immediate retry.
+4. Errors are shown explicitly: rejected key (the stored key is cleared), rate limit with retry time, conflict with
+   the active run's ID, dispatch disabled, dispatcher unreachable, and GitHub credential, rate-limit or timeout
+   failures.
 
-V3 offers no Run now while a run is queued or running.
+**When live dispatch is unavailable** (dispatcher disabled or unreachable), V3 says why and offers GitHub's own
+*Run workflow* page as a clearly labelled alternative.
 
 ## Overview after executions
 
@@ -61,23 +75,16 @@ Each source is merged in a fixed order:
   backend's `generated_ts`, never replaces a newer one.
 - **Failed refreshes:** a failure keeps the last verified value, marked *not current*.
 
-## Missing infrastructure for one-click and protected launches
+## Remaining prerequisites
 
-1. **Server-side dispatcher.** A Worker endpoint, for example
-   `POST /api/research-controls/dispatch {workflow, ref, inputs}`. It would need:
-   - a fine-grained GitHub token limited to `actions: write` on PulseWorkerV2;
-   - owner authentication on every call (for example, an admin token checked in the Worker,
-     never in V3);
-   - an allowlist of dispatchable workflow files;
-   - a server-side audit record (who, what, run id, commit, timestamps).
-
-   `api/controls.js` has `DISPATCH_ENDPOINT = null` until it exists.
-2. **A reviewed `workflow_dispatch` workflow for the market-move sealed evaluation.**
-   - It would pass the plan sha256 as an input to `evaluate.py --authorize-evaluation`.
-   - It needs `contents: write` limited to a research-data branch, no secrets and no D1.
-3. **EXP-23 manual runs.** These would need a reviewed change adding `workflow_dispatch` to
-   `exp23-forward-evaluation.yml`. Its approved design is schedule-only.
-
-Until (1) and (2) exist, the protected-evaluation panel shows the exact specification, period and
-safeguards and checks the confirmation, but its launch button stays disabled with the reason.
-Nothing is recorded as authorized and nothing is launched.
+1. **Owner provisioning (needed for live dispatch).** Create the fine-grained PAT and owner key, add them as GitHub
+   Actions secrets `RESEARCH_DISPATCH_GITHUB_TOKEN` and `RESEARCH_DISPATCH_OWNER_KEY` in PulseWorkerV2, and run
+   *Deploy research dispatcher* (PulseWorkerV2 `dispatcher/README.md`, "Secret provisioning"). Until then the
+   dispatcher reports `dispatch_enabled: false` and V3 offers no live dispatch.
+2. **Market-move sealed evaluation.** It needs a reviewed `workflow_dispatch` workflow that takes the plan sha256,
+   with `contents: write` limited to a research-data branch, and then an allowlist entry on the dispatcher. Until
+   then the protected review checks the confirmation but launch stays disabled.
+3. **EXP-23.** Its approved schedule-only governance would have to change (adding `workflow_dispatch`) before it
+   could be allowlisted.
+4. **Production-D1 jobs.** Each needs the owner's explicit authorization for production data access on demand and a
+   per-job review before it could be allowlisted.
