@@ -8,7 +8,7 @@ const p = (i, o = {}) => { const ts = Date.UTC(2026, 9, 1) + i * 3 * H; return {
 const ADAPT = { ok: true, mode: 'shadow', policy: { minFactor: 0.5, maxFactor: 1.5, maxStepPct: 10, maxSharePct: 20, minSamples: 30, minDeltaPts: 2, sampleSpacingHours: 6 },
   defaults: { fng: [2, 1], funding: [1, 1], hloi: [4, 0.3] }, default_shares_pct: { fng: 46.5, funding: 23.3, hloi: 30.2 }, latest: null,
   preview: { persisted: false, n_samples: 8, evidence: {}, reason: 'insufficient evidence: 8 of 30' }, evaluation: null, history: [] };
-const FRESH = { ok: true, rows: ['BTC', 'ETH', 'LINK'].flatMap(coin => ['12', '24'].map(horizon => ({ coin, horizon, track: 'core', status: 'FRESH', latest_ts: NOW - H }))) };
+const FRESH = { ok: true, generated_ts: NOW - 60000, rows: ['BTC', 'ETH', 'LINK'].flatMap(coin => ['12', '24'].map(horizon => ({ coin, horizon, track: 'core', status: 'FRESH', latest_ts: NOW - H }))) };
 
 function data(over = {}) {
   const charts = {};
@@ -22,25 +22,37 @@ function data(over = {}) {
 
 test('Overview renders sections A–E in order with no inner app identity', () => {
   const html = renderOverview(buildModel(data(), NOW));
-  const order = ['Prediction status', 'Core metrics', 'What changed?', 'What should we do next?', 'Next milestone'].map(t => html.indexOf(t));
+  const order = ['Research outcome', 'Core metrics', 'What changed?', 'What should we do next?', 'Next milestone'].map(t => html.indexOf(t));
   assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `order ${order}`);
   assert.doesNotMatch(html, /CryptoPulse|rd-v3|Last refresh/);
-  assert.match(html, /Insufficient data|Inconclusive|Improving|Not improving|Data quality problem/);
-  assert.match(html, /6\/6 series saving on schedule/);
+  assert.match(html, /Insufficient data|Inconclusive|Improving|Not improving|Deteriorating/);
+  assert.match(html, /Data quality<\/p><p class="rd-metric-v ">Healthy/);
   assert.match(html, /eligible for evaluation, not successful/);
 });
 
-test('a stale core series makes the status a data quality problem and the first recommendation a blocker', () => {
+test('stale ETH (best-effort) is Degraded, not a problem, and leaves the research outcome untouched', () => {
   const fr = { ...FRESH, rows: FRESH.rows.map(r => (r.coin === 'ETH' && r.horizon === '12' ? { ...r, status: 'STALE' } : r)) };
+  const healthy = buildModel(data(), NOW);
   const m = buildModel(data({ freshness: fr }), NOW);
-  assert.equal(m.overall.status, 'DATA_QUALITY');
+  assert.equal(m.dataQuality.status, 'DEGRADED');
+  assert.equal(m.overall.status, healthy.overall.status);
+  assert.ok(!m.actions.some(a => a.kind === 'blocker'));
+  assert.match(renderOverview(m), /Degraded \(best-effort series\)/);
+});
+
+test('a stale required series (BTC/LINK) is a data quality problem with a blocker, research outcome unchanged', () => {
+  const fr = { ...FRESH, rows: FRESH.rows.map(r => (r.coin === 'LINK' && r.horizon === '24' ? { ...r, status: 'STALE' } : r)) };
+  const m = buildModel(data({ freshness: fr }), NOW);
+  assert.equal(m.dataQuality.status, 'PROBLEM');
+  assert.equal(m.overall.status, buildModel(data(), NOW).overall.status);
   assert.equal(m.actions[0].kind, 'blocker');
   assert.match(renderOverview(m), /Data quality problem/);
 });
 
-test('persistence check unavailable renders Unavailable, not a fabricated count', () => {
+test('persistence check unavailable renders Unable to verify, not a fabricated count or Healthy', () => {
   const html = renderOverview(buildModel(data({ freshness: { ok: false, error: 'timeout' } }), NOW));
-  assert.match(html, /Prediction persistence<\/p><p class="rd-metric-v"><span class="rd-muted">Unavailable/);
+  assert.match(html, /Data quality<\/p><p class="rd-metric-v rd-muted">Unable to verify/);
+  assert.doesNotMatch(html, /Healthy/);
 });
 
 test('every Performance sub-view renders; a failed series shows Unavailable; provenance is stated', () => {

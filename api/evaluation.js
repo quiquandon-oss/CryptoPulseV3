@@ -122,28 +122,20 @@ const lbl = (c) => `${c.coin} ${c.horizon}h`;
 const pctTxt = (x) => `${(x * 100).toFixed(1)}%`;
 
 /**
- * Overall prediction status, one of IMPROVING | DETERIORATING (significant drop over
- * time) | NOT_IMPROVING (significantly below baseline) | INCONCLUSIVE |
- * INSUFFICIENT_DATA | DATA_QUALITY.
- * cells: [{coin, horizon, ok, error?, stats, trend}] (ok:false = series failed to load);
- * freshness: normalizePredictionFreshness output (or null when unavailable).
+ * Research outcome, one of IMPROVING | DETERIORATING (significant drop over time) |
+ * NOT_IMPROVING (significantly below baseline) | INCONCLUSIVE | INSUFFICIENT_DATA |
+ * UNVERIFIED (no V2 predictions could be loaded).
+ * Computed from evaluation results only: data quality and job execution are
+ * separate statuses and never change this one.
+ * cells: [{coin, horizon, ok, error?, stats, trend}] (ok:false = series not loaded).
  */
-export function overallStatus(cells, freshness) {
-  const problems = [];
-  for (const c of cells) if (c.ok === false) problems.push(`${lbl(c)} predictions could not be loaded (${c.error || 'unavailable'})`);
-  if (freshness && freshness.ok) {
-    for (const row of freshness.rows || []) {
-      if (row.track === 'core' && (row.status === 'STALE' || row.status === 'NONE' || row.status === 'MISSING')) {
-        problems.push(`${row.coin} ${row.horizon}h core predictions are ${row.status.toLowerCase()} (not saving on schedule)`);
-      }
-    }
-  }
-  if (problems.length) {
-    return { status: 'DATA_QUALITY', reason: `${problems.join('; ')}. Results for the affected series are not current, so improvement cannot be judged.`, problems };
-  }
+export function overallStatus(cells) {
   const ok = cells.filter(c => c.ok !== false && c.stats);
+  const missing = cells.filter(c => c.ok === false);
+  if (cells.length && !ok.length) return { status: 'UNVERIFIED', reason: 'No V2 prediction series could be loaded, so the research outcome cannot be evaluated.' };
+  const scope = missing.length ? ` Based on ${ok.length} of ${cells.length} series (${missing.map(lbl).join(', ')} not loaded).` : '';
   const withData = ok.filter(c => c.stats.n > 0);
-  if (!withData.length) return { status: 'INSUFFICIENT_DATA', reason: 'No resolved predictions are available yet, so nothing can be compared with the baseline.' };
+  if (!withData.length) return { status: 'INSUFFICIENT_DATA', reason: `No resolved predictions are available yet, so nothing can be compared with the baseline.${scope}` };
   const beats = withData.filter(c => c.stats.verdict === 'BEATS_BASELINE');
   const below = withData.filter(c => c.stats.verdict === 'BELOW_BASELINE');
   const improving = withData.filter(c => c.trend && c.trend.verdict === 'IMPROVING');
@@ -151,15 +143,15 @@ export function overallStatus(cells, freshness) {
   const trendable = withData.filter(c => c.trend && c.trend.verdict !== 'INSUFFICIENT_DATA');
   const pooled = withData.reduce((a, c) => ({ n: a.n + c.stats.n, hits: a.hits + c.stats.hits }), { n: 0, hits: 0 });
   const beatsTxt = beats.length ? ` ${beats.map(lbl).join(', ')} ${beats.length === 1 ? 'beats' : 'beat'} the baseline.` : '';
-  if (declining.length) return { status: 'DETERIORATING', reason: `Accuracy fell significantly over the last 30 days vs the 30 days before for ${declining.map(lbl).join(', ')}.` };
-  if (below.length && !beats.length) return { status: 'NOT_IMPROVING', reason: `Accuracy is significantly below the always-same-direction baseline for ${below.map(lbl).join(', ')}.` };
+  if (declining.length) return { status: 'DETERIORATING', reason: `Accuracy fell significantly over the last 30 days vs the 30 days before for ${declining.map(lbl).join(', ')}.${scope}` };
+  if (below.length && !beats.length) return { status: 'NOT_IMPROVING', reason: `Accuracy is significantly below the always-same-direction baseline for ${below.map(lbl).join(', ')}.${scope}` };
   if (improving.length && beats.length && !below.length) {
-    return { status: 'IMPROVING', reason: `Accuracy rose significantly in the last 30 days vs the 30 days before (${improving.map(lbl).join(', ')}) and${beatsTxt.replace(/\.$/, '')} on ${pooled.n} resolved predictions.` };
+    return { status: 'IMPROVING', reason: `Accuracy rose significantly in the last 30 days vs the 30 days before (${improving.map(lbl).join(', ')}) and${beatsTxt.replace(/\.$/, '')} on ${pooled.n} resolved predictions.${scope}` };
   }
   if (!trendable.length) {
-    return { status: 'INSUFFICIENT_DATA', reason: `Improvement over time cannot be measured yet: no coin/horizon has ${MIN_TREND_PER_WINDOW} resolved predictions in both the last 30 days and the 30 days before. Pooled accuracy so far ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved.${beatsTxt}` };
+    return { status: 'INSUFFICIENT_DATA', reason: `Improvement over time cannot be measured yet: no coin/horizon has ${MIN_TREND_PER_WINDOW} resolved predictions in both the last 30 days and the 30 days before. Pooled accuracy so far ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved.${beatsTxt}${scope}` };
   }
-  return { status: 'INCONCLUSIVE', reason: `No significant change in accuracy over the last 30 days for the ${trendable.length} series that can be tested (pooled ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved).${beatsTxt || ' No series is distinguishable from the always-same-direction baseline.'}` };
+  return { status: 'INCONCLUSIVE', reason: `No significant change in accuracy over the last 30 days for the ${trendable.length} series that can be tested (pooled ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved).${beatsTxt || ' No series is distinguishable from the always-same-direction baseline.'}${scope}` };
 }
 
 /** The same records as they stood at `asOf`: rows created by then, resolved only if their target had passed. */
@@ -242,12 +234,17 @@ export function whatChanged({ cells, prevCells, overall, prevOverall, experiment
   return meaningful ? out : ['No meaningful change in the last 24 hours.'];
 }
 
-export const STATUS_LABEL = { IMPROVING: 'Improving', DETERIORATING: 'Deteriorating', NOT_IMPROVING: 'Not improving', INCONCLUSIVE: 'Inconclusive', INSUFFICIENT_DATA: 'Insufficient data', DATA_QUALITY: 'Data quality problem' };
+export const STATUS_LABEL = { IMPROVING: 'Improving', DETERIORATING: 'Deteriorating', NOT_IMPROVING: 'Not improving', INCONCLUSIVE: 'Inconclusive', INSUFFICIENT_DATA: 'Insufficient data', UNVERIFIED: 'Unable to evaluate' };
 
 /** At most three recommendations, each tied to observed evidence or an operational blocker. */
-export function recommendations({ overall, cells, experiments, adaptation, review }) {
+export function recommendations({ overall, cells, experiments, adaptation, review, dataQuality }) {
   const out = [];
-  for (const p of (overall && overall.problems) || []) out.push({ kind: 'blocker', text: `Fix: ${p}. Evidence for that series is not accumulating until it is resolved.` });
+  // Operational blockers come from data quality (required series only; best-effort series never block).
+  if (dataQuality && dataQuality.status === 'PROBLEM') {
+    for (const r of dataQuality.required) out.push({ kind: 'blocker', text: `Fix: ${r.coin} ${r.horizon}h ${r.track} predictions are ${String(r.status).toLowerCase()} (not saving on schedule). Evidence for that required series is not accumulating until it is resolved.` });
+  } else if (dataQuality && dataQuality.status === 'UNVERIFIED') {
+    out.push({ kind: 'blocker', text: `Restore verification: ${dataQuality.reason}` });
+  }
   for (const e of (experiments || []).filter(x => x.suggested_status === 'READY_FOR_ANALYSIS')) {
     out.push({ kind: 'evidence', text: `Run the planned evaluation for ${e.experiment_id} (${e.progress_count ?? '—'}/${e.required_sample ?? '—'} samples). Meeting the threshold makes it eligible for evaluation, not successful.` });
   }

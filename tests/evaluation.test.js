@@ -76,28 +76,29 @@ test('largeMoveStats: reports insufficient below 10 large moves, recall at or ab
   assert.equal(many.down.recall, 0.7);
 });
 
-test('overallStatus: DATA_QUALITY on a stale core series or a failed series', () => {
-  const fr = { ok: true, rows: [{ coin: 'BTC', horizon: '24', track: 'core', status: 'STALE' }, { coin: 'ETH', horizon: '24', track: 'challenger', status: 'NONE' }] };
-  const b = overallStatus([], fr);
-  assert.equal(b.status, 'DATA_QUALITY'); assert.match(b.reason, /BTC 24h/); assert.doesNotMatch(b.reason, /ETH/);
-  assert.equal(overallStatus([{ coin: 'ETH', horizon: 12, ok: false, error: 'HTTP 500' }], null).status, 'DATA_QUALITY');
+test('overallStatus is the research outcome only: persistence never changes it; missing series are scoped, all missing is UNVERIFIED', () => {
+  const cell = { coin: 'BTC', horizon: 24, stats: { n: 50, hits: 26, verdict: 'WITHIN_NOISE' }, trend: { verdict: 'NO_SIGNIFICANT_CHANGE' } };
+  assert.equal(overallStatus.length, 1); // no freshness argument any more
+  const s = overallStatus([cell, { coin: 'ETH', horizon: 12, ok: false, error: 'HTTP 500' }]);
+  assert.equal(s.status, 'INCONCLUSIVE'); assert.match(s.reason, /Based on 1 of 2 series \(ETH 12h not loaded\)/);
+  assert.equal(overallStatus([{ coin: 'ETH', horizon: 12, ok: false, error: 'HTTP 500' }]).status, 'UNVERIFIED');
 });
 
 test('overallStatus: INSUFFICIENT_DATA without resolved rows or without a testable 30-day trend', () => {
-  assert.equal(overallStatus([], { ok: true, rows: [] }).status, 'INSUFFICIENT_DATA');
+  assert.equal(overallStatus([]).status, 'INSUFFICIENT_DATA');
   const cell = { coin: 'BTC', horizon: 24, stats: { n: 50, hits: 26, verdict: 'WITHIN_NOISE' }, trend: { verdict: 'INSUFFICIENT_DATA' } };
-  const s = overallStatus([cell], null);
+  const s = overallStatus([cell]);
   assert.equal(s.status, 'INSUFFICIENT_DATA'); assert.match(s.reason, /cannot be measured yet/);
 });
 
 test('overallStatus: INCONCLUSIVE / DETERIORATING / NOT_IMPROVING / IMPROVING from evaluation results only', () => {
   const cell = { coin: 'BTC', horizon: 24, stats: { n: 50, hits: 26, verdict: 'WITHIN_NOISE' }, trend: { verdict: 'NO_SIGNIFICANT_CHANGE' } };
-  assert.equal(overallStatus([cell], null).status, 'INCONCLUSIVE');
-  assert.equal(overallStatus([{ ...cell, trend: { verdict: 'DECLINING' } }], null).status, 'DETERIORATING');
-  assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BELOW_BASELINE' } }], null).status, 'NOT_IMPROVING');
-  assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BEATS_BASELINE' }, trend: { verdict: 'IMPROVING' } }], null).status, 'IMPROVING');
+  assert.equal(overallStatus([cell]).status, 'INCONCLUSIVE');
+  assert.equal(overallStatus([{ ...cell, trend: { verdict: 'DECLINING' } }]).status, 'DETERIORATING');
+  assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BELOW_BASELINE' } }]).status, 'NOT_IMPROVING');
+  assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BEATS_BASELINE' }, trend: { verdict: 'IMPROVING' } }]).status, 'IMPROVING');
   // beating the baseline without a measured improvement over time is not "Improving"
-  assert.notEqual(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BEATS_BASELINE' } }], null).status, 'IMPROVING');
+  assert.notEqual(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BEATS_BASELINE' } }]).status, 'IMPROVING');
 });
 
 test('predictionsAsOf drops later rows and un-resolves rows whose target had not passed', () => {
@@ -131,12 +132,15 @@ test('whatChanged reports resolutions and verdict changes, or no meaningful chan
   assert.deepEqual(same, ['No meaningful change in the last 24 hours.']);
 });
 
-test('recommendations: blockers first, eligible experiments framed as eligible not successful, max three', () => {
-  const overall = { status: 'DATA_QUALITY', problems: ['ETH 12h core predictions are stale (not saving on schedule)'] };
+test('recommendations: required-series blockers first, best-effort never blocks, eligible framed as eligible, max three', () => {
+  const dqProblem = { status: 'PROBLEM', required: [{ coin: 'BTC', horizon: '24', track: 'core', status: 'STALE' }] };
   const exps = ['EXP-004', 'EXP-005', 'EXP-009'].map(id => ({ experiment_id: id, suggested_status: 'READY_FOR_ANALYSIS', progress_count: 4, required_sample: 4 }));
-  const r = recommendations({ overall, cells: [], experiments: exps, adaptation: null, review: null });
-  assert.equal(r.length, 3); assert.equal(r[0].kind, 'blocker'); assert.match(r[1].text, /eligible for evaluation, not successful/);
-  assert.deepEqual(recommendations({ overall: { status: 'INCONCLUSIVE' }, cells: [], experiments: [], adaptation: null, review: null }), []);
+  const r = recommendations({ overall: { status: 'INCONCLUSIVE' }, cells: [], experiments: exps, adaptation: null, review: null, dataQuality: dqProblem });
+  assert.equal(r.length, 3); assert.equal(r[0].kind, 'blocker'); assert.match(r[0].text, /BTC 24h core/); assert.match(r[1].text, /eligible for evaluation, not successful/);
+  const degraded = recommendations({ overall: { status: 'INCONCLUSIVE' }, cells: [], experiments: [], adaptation: null, review: null, dataQuality: { status: 'DEGRADED', required: [], bestEffort: [{ coin: 'ETH' }] } });
+  assert.deepEqual(degraded, []);
+  const unv = recommendations({ overall: { status: 'INCONCLUSIVE' }, cells: [], experiments: [], adaptation: null, review: null, dataQuality: { status: 'UNVERIFIED', reason: 'check failed', required: [] } });
+  assert.equal(unv[0].kind, 'blocker'); assert.match(unv[0].text, /Restore verification/);
 });
 
 test('groupExperiments keeps every id; unknown ids land in Other', () => {

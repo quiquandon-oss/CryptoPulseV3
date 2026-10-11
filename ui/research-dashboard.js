@@ -15,6 +15,9 @@
 
 import * as Ev from '../api/evaluation.js';
 import { formatEtaText, registryTitle } from '../api/research.js';
+import * as DQ from '../api/dataquality.js';
+import * as C from '../api/controls.js';
+import { renderControls, renderExecutionTile, summarizeModelChange } from './research-controls.js';
 
 export const COINS = ['BTC', 'ETH', 'LINK'];
 export const HORIZONS = [12, 24];
@@ -66,18 +69,22 @@ function growthOf(preds, now) {
 }
 
 /**
- * @param {object} d raw fetch results: { charts: {`${coin}-${h}`: {ok, predictions}}, freshness, registry, v1Latest, adaptation, hloi }
+ * @param {object} d values per source: { charts: {`${coin}-${h}`: {ok, predictions}}, freshness, registry, v1Latest, adaptation, hloi }
+ * @param {object} [opts] { freshState: acceptSource state for /prediction-freshness, sources: {name: state} for staleness }
  */
-export function buildModel(d, now = Date.now()) {
+export function buildModel(d, now = Date.now(), opts = {}) {
   const cells = evalCells(d.charts, now);
   const prevCells = evalCells(d.charts, now, now - Ev.DAY_MS);
   const freshness = d.freshness && d.freshness.ok ? d.freshness : null;
   const experiments = d.registry && d.registry.ok ? d.registry.experiments : [];
   const adaptation = d.adaptation && d.adaptation.ok !== false && d.adaptation.defaults ? d.adaptation : null;
   const hloi = d.hloi && d.hloi.status ? d.hloi : null;
-  const overall = Ev.overallStatus(cells, freshness);
-  // Previous evaluation: the same records as of 24h ago, without today's persistence check.
-  const prevOverall = Ev.overallStatus(prevCells, null);
+  // Three independent dimensions: research outcome (evaluation only), data quality (persistence + availability),
+  // execution (job runs, held by the controls). None is derived from another.
+  const overall = Ev.overallStatus(cells);
+  const prevOverall = Ev.overallStatus(prevCells); // the same records as of 24 h ago
+  const freshState = opts.freshState || (d.freshness ? DQ.acceptSource(null, d.freshness, { seq: 0, fetchedAt: now }) : null);
+  const dataQuality = DQ.assessDataQuality(freshState, now, DQ.OPERATING_POLICY, cells.filter(c => !c.ok));
   const review = Ev.nextReview({ cells, experiments, now });
   const v1 = d.v1Latest && d.v1Latest.ok ? d.v1Latest : null;
   const { evidence } = Ev.adaptationEvidence(adaptation);
@@ -85,8 +92,10 @@ export function buildModel(d, now = Date.now()) {
   return {
     now, cells, overall, prevOverall, review, freshness, experiments, adaptation, hloi, v1,
     pooled: pool(cells.filter(c => c.ok)),
-    changes: Ev.whatChanged({ cells, prevCells, overall: overall.status === 'DATA_QUALITY' ? Ev.overallStatus(cells, null) : overall, prevOverall, experiments, now }),
-    actions: Ev.recommendations({ overall, cells, experiments, adaptation, review }),
+    dataQuality,
+    staleSources: Object.entries(opts.sources || {}).filter(([, st]) => st && (st.stale || (!st.value && st.lastError))).map(([name, st]) => ({ name, verifiedAt: st.verifiedAt, lastError: st.lastError, stale: !!st.stale })),
+    changes: Ev.whatChanged({ cells, prevCells, overall, prevOverall, experiments, now }),
+    actions: Ev.recommendations({ overall, cells, experiments, adaptation, review, dataQuality }),
     errors: {
       registry: d.registry && !d.registry.ok ? d.registry.error : null,
       freshness: d.freshness && !d.freshness.ok ? d.freshness.error : (!d.freshness ? 'not loaded' : null),
@@ -126,6 +135,7 @@ export function pool(cells) {
 // ---- shared pieces -----------------------------------------------------------
 
 const STATUS_UI = {
+  UNVERIFIED: { tone: 'tone-info', icon: '?' },
   IMPROVING: { tone: 'tone-good', icon: '↗' },
   DETERIORATING: { tone: 'tone-bad', icon: '↘' },
   NOT_IMPROVING: { tone: 'tone-bad', icon: '↓' },
@@ -143,7 +153,22 @@ const kv = (rows) => `<dl class="rd-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</d
 
 // ---- Overview -----------------------------------------------------------------
 
-export function renderOverview(m) {
+const DQ_TONE = { HEALTHY: '', DEGRADED: 'tone-warn', PROBLEM: 'rd-neg', UNVERIFIED: 'rd-muted' };
+
+export function renderDataQualityTile(dq, incidents = []) {
+  const open = incidents.filter(i => i.resolvedAt == null);
+  const closed = incidents.filter(i => i.resolvedAt != null).slice(0, 5);
+  return `<div class="rd-metric"><p class="rd-metric-t">Data quality</p><p class="rd-metric-v ${DQ_TONE[dq.status] || ''}">${esc(DQ.DQ_LABEL[dq.status])}</p>
+    <p class="rd-metric-s">${esc(dq.reason)}${dq.verifiedAt ? `<br>Verified ${esc(dt(dq.verifiedAt))} (V2 check generated ${esc(dt(dq.asOf))}).` : ''}</p>
+    ${incidents.length ? details(`Incident history (${open.length} open, ${closed.length} resolved shown)`, `<ul class="rd-list">${[...open, ...closed].map(i => `<li>${esc(i.series)} ${esc(String(i.status).toLowerCase())} · seen ${esc(dt(i.openedAt))}${i.resolvedAt ? ` · recovered ${esc(dt(i.resolvedAt))}` : ' · still open'}</li>`).join('')}</ul><p class="rd-foot">Recorded on this device from verified checks only. History is kept apart from current health.</p>`) : ''}</div>`;
+}
+
+export function renderStaleBanner(m, lastSuccessAt) {
+  if (!m.staleSources || !m.staleSources.length) return '';
+  return `<section class="rd-card rd-note-warn"><p class="rd-note-t">⚠ Not current</p><p class="rd-sub">The latest refresh failed for ${esc(m.staleSources.map(x => `${x.name} (${x.lastError})`).join(', '))}. ${m.staleSources.some(x => x.stale) ? `Values shown for those sources are the last verified ones${lastSuccessAt ? ` (last fully successful refresh ${esc(dt(lastSuccessAt))})` : ''} and are not current.` : 'No earlier verified values exist for them.'}</p></section>`;
+}
+
+export function renderOverview(m, ctx = {}) {
   const s = STATUS_UI[m.overall.status] || STATUS_UI.INCONCLUSIVE;
   const p = m.pooled;
   const sideTxt = (x, dir) => (x.recall == null ? `${dir} ${INSUF} <span class="rd-muted">(${x.moves} move${x.moves === 1 ? '' : 's'})</span>` : `${dir} ${esc(pct(x.recall, 0))} <span class="rd-muted">(${x.called}/${x.moves})</span>`);
@@ -152,32 +177,25 @@ export function renderOverview(m) {
   const skill = calibCells.length ? calibCells.reduce((a, c) => a + c.calib.skill * c.calib.n, 0) / calN : null;
   // Show the scheduled / live-fallback split whenever both exist: pooling them could mislead.
   const split = p.scheduled.n && p.live.n ? `<br>Scheduled ${esc(pct(p.scheduled.accuracy))} (n=${p.scheduled.n}) · live-fallback ${esc(pct(p.live.accuracy))} (n=${p.live.n})` : '';
-  const fr = m.freshness;
-  const core = fr ? fr.rows.filter(r => r.track === 'core') : [];
-  const freshCount = core.filter(r => r.status === 'FRESH').length;
-  const latest = core.reduce((a, r) => (Number.isFinite(r.latest_ts) && r.latest_ts > a ? r.latest_ts : a), 0);
-  const badRows = core.filter(r => r.status !== 'FRESH');
-  const freshVal = fr ? `${freshCount}/${core.length} series saving on schedule` : UNAV;
-  const freshSub = fr ? `${badRows.length ? `Not current: ${esc(badRows.map(r => `${r.coin} ${r.horizon}h (${r.status.toLowerCase()})`).join(', '))}. ` : ''}Latest V2 prediction ${esc(dt(latest || null))}` : `/prediction-freshness: ${esc(m.errors.freshness)}`;
   const failed = m.cells.filter(c => !c.ok);
-
   const r = m.review;
-  return `
+  return `${renderStaleBanner(m, ctx.lastSuccessAt)}
   <section class="rd-card rd-status">
     <div class="rd-status-icon ${s.tone}" aria-hidden="true">${s.icon}</div>
     <div class="rd-min0">
-      <p class="rd-label">Prediction status · V2, all coins and horizons</p>
+      <p class="rd-label">Research outcome · V2 predictions, all coins and horizons</p>
       <p class="rd-status-v ${s.tone}">${esc(Ev.STATUS_LABEL[m.overall.status])}</p>
       <p class="rd-sub">${esc(m.overall.reason)}</p>
     </div>
   </section>
+  <div class="rd-grid rd-mb">${renderDataQualityTile(m.dataQuality, ctx.incidents || [])}${renderExecutionTile(ctx.controls, m.now)}</div>
+  <p class="rd-muted rd-mb">${ctx.lastSuccessAt ? `Overview data last refreshed successfully at ${esc(dt(ctx.lastSuccessAt))}.` : 'Overview data has not been refreshed successfully yet.'} Research outcome, data quality and execution are separate: none is inferred from another.</p>
   ${section('Core metrics', `<div class="rd-grid">
     ${metric('Directional accuracy vs baseline', p.n >= Ev.MIN_ACCURACY_SAMPLES ? `<span class="${VERDICT_CLS[p.verdict] || ''}">${esc(pts(p.delta))}</span>` : INSUF,
       p.n >= Ev.MIN_ACCURACY_SAMPLES ? `${esc(pct(p.accuracy))} vs ${esc(pct(p.baseline))} always-same-direction baseline · n=${p.n} · ${esc(verdictTxt(p.verdict))}${split}` : `${p.n} resolved of ${Ev.MIN_ACCURACY_SAMPLES} needed`)}
     ${metric(`Large moves (≥${Ev.LARGE_MOVE_PCT}%) called`, `${sideTxt(p.largeUp, '↑')}<br>${sideTxt(p.largeDown, '↓')}`, `Recall shown only with ≥${Ev.MIN_LARGE_MOVES} moves per direction`)}
     ${metric('Calibration (Brier skill)', skill == null ? INSUF : `${skill >= 0 ? '+' : ''}${esc((skill * 100).toFixed(1))}%`, skill == null ? 'Needs ≥10 resolved per series' : `vs climatology on ${calN} resolved · >0 is better than the base rate`)}
     ${metric('Resolved / pending', `${p.resolved} / ${p.pending}`, `${p.scheduled.n} scheduled · ${p.live.n} live-fallback resolved`)}
-    ${metric('Prediction persistence', freshVal, freshSub, 'rd-span')}
   </div>${failed.length ? `<p class="rd-foot">Unavailable series: ${esc(failed.map(c => `${lbl(c)} (${c.error})`).join(', '))}.</p>` : ''}`)}
   ${section('What changed?', `<p class="rd-muted rd-mb">Compared with the evaluation as of 24 h ago, rebuilt from the same records.</p><ul class="rd-list">${m.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`, 'rd-note-info')}
   ${section('What should we do next?', m.actions.length
@@ -333,12 +351,38 @@ export function renderFactors(m) {
 
 // ---- DOM glue -----------------------------------------------------------------
 
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* private mode */ } },
+};
+export const POLL_ACTIVE_MS = 60000;
+export const POLL_IDLE_MS = 5 * 60000;
+export const MIN_INTERIM_REFRESH_MS = 2 * 60000;
+
+/** Merge one load's results into held per-source states (newer-only), returning values for buildModel. */
+export function mergeSources(held, results, meta) {
+  const next = { ...held };
+  for (const [name, res] of Object.entries(results)) next[name] = DQ.acceptSource(held[name] || null, res, meta);
+  const values = { charts: {} };
+  for (const [name, st] of Object.entries(next)) {
+    const v = st.value || (st.lastError ? { ok: false, error: st.lastError } : null);
+    if (name.startsWith('chart:')) values.charts[name.slice(6)] = v;
+    else values[name] = v;
+  }
+  const failed = Object.entries(results).filter(([, r]) => !r || r.ok === false).map(([n]) => n);
+  return { held: next, values, failed };
+}
+
 /**
  * @param {HTMLElement} root
- * @param {{ fetchers: object, onTab?: (tab:string)=>void }} opts
+ * @param {{ fetchers: object, fetchRuns?: Function, openUrl?: Function, onTab?: (tab:string)=>void, now?: Function }} opts
  */
-export function mountResearchDashboard(root, { fetchers, onTab } = {}) {
-  const state = { tab: 'overview', perf: 'direction', exp: 'all', model: null, loadedAt: 0, loading: null, error: null };
+export function mountResearchDashboard(root, { fetchers, fetchRuns = C.fetchRuns, openUrl, onTab, now: clock = () => Date.now() } = {}) {
+  const state = { tab: 'overview', perf: 'direction', exp: 'all', model: null, loadedAt: 0, loading: null, error: null,
+    sources: {}, seq: 0, lastSuccessAt: null, incidents: LS.get('cp3_dq_incidents', []),
+    ctl: { runs: null, etag: null, lastPollAt: null, lastOkPollAt: null, pollError: null, rate: null,
+      pending: LS.get('cp3_research_pending', {}), audit: LS.get('cp3_research_audit', []), review: null, authInput: {}, lastExecutionRefresh: null },
+    timer: null, lastLoadAt: 0 };
   try { const t = localStorage.getItem('cp3_research_tab'); if (TABS.some(([k]) => k === t)) state.tab = t; } catch (_) { /* ignore */ }
 
   const tabsHtml = () => `<div class="rd-tabs" role="tablist">${TABS
@@ -346,48 +390,167 @@ export function mountResearchDashboard(root, { fetchers, onTab } = {}) {
 
   function render() {
     const m = state.model;
+    const t = clock();
     let body;
     if (!m) body = section('Research', `<p class="rd-sub">${state.loading ? 'Loading live data…' : esc(state.error || 'Not loaded.')}</p>`);
-    else if (state.tab === 'performance') body = renderPerformance(m, state.perf);
-    else if (state.tab === 'experiments') body = renderExperiments(m, state.exp);
-    else if (state.tab === 'factors') body = renderFactors(m);
-    else body = renderOverview(m);
-    // Preserve which <details> are open across re-renders (e.g. a 30-min refresh).
-    const open = new Set([...root.querySelectorAll('details[open] > summary')].map(s => s.textContent + '|' + (s.closest('article')?.querySelector('.rd-exp-t,.rd-src-t')?.textContent || '')));
+    else if (state.tab === 'performance') body = renderStaleBanner(m, state.lastSuccessAt) + renderPerformance(m, state.perf);
+    else if (state.tab === 'experiments') body = renderControls(state.ctl, t) + renderExperiments(m, state.exp);
+    else if (state.tab === 'factors') body = renderStaleBanner(m, state.lastSuccessAt) + renderFactors(m);
+    else body = renderOverview(m, { controls: state.ctl, incidents: state.incidents, lastSuccessAt: state.lastSuccessAt });
+    // Preserve open <details> and focused inputs across re-renders (polling re-renders often).
+    const open = new Set([...root.querySelectorAll('details[open] > summary')].map(x => x.textContent + '|' + (x.closest('article')?.querySelector('.rd-exp-t,.rd-src-t')?.textContent || '')));
+    const focused = document.activeElement && root.contains(document.activeElement) ? document.activeElement.dataset.rdPhrase : null;
     root.innerHTML = tabsHtml() + `<div class="rd-body">${body}</div>`;
-    root.querySelectorAll('details > summary').forEach(s => {
-      if (open.has(s.textContent + '|' + (s.closest('article')?.querySelector('.rd-exp-t,.rd-src-t')?.textContent || ''))) s.parentElement.open = true;
+    root.querySelectorAll('details > summary').forEach(x => {
+      if (open.has(x.textContent + '|' + (x.closest('article')?.querySelector('.rd-exp-t,.rd-src-t')?.textContent || ''))) x.parentElement.open = true;
     });
+    if (focused) { const el = root.querySelector(`[data-rd-phrase="${focused}"]`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
     if (onTab) onTab(state.tab);
+  }
+
+  function audit(entry) {
+    state.ctl.audit = C.appendAudit(state.ctl.audit, { at: clock(), ...entry });
+    LS.set('cp3_research_audit', state.ctl.audit);
   }
 
   root.addEventListener('click', (ev) => {
     const t = ev.target.closest('button');
-    if (!t || !root.contains(t)) return;
+    if (!t || !root.contains(t) || t.disabled) return;
     if (t.dataset.rdTab) { state.tab = t.dataset.rdTab; try { localStorage.setItem('cp3_research_tab', state.tab); } catch (_) { /* ignore */ } render(); }
     else if (t.dataset.rdPerf) { state.perf = t.dataset.rdPerf; render(); }
     else if (t.dataset.rdExp) { state.exp = t.dataset.rdExp; render(); }
+    else if (t.dataset.rdRun) runNow(t.dataset.rdRun);
+    else if (t.dataset.rdReview) { state.ctl.review = state.ctl.review === t.dataset.rdReview ? null : t.dataset.rdReview; render(); }
+    else if (t.dataset.rdAuthorize) authorize(t.dataset.rdAuthorize);
+  });
+  root.addEventListener('input', (ev) => {
+    const el = ev.target;
+    const id = el.dataset.rdPhrase || el.dataset.rdAck;
+    if (!id) return;
+    const cur = state.ctl.authInput[id] || {};
+    state.ctl.authInput[id] = el.dataset.rdAck ? { ...cur, acknowledged: el.checked } : { ...cur, phrase: el.value };
+    render();
   });
 
-  async function load({ force = false } = {}) {
+  function runNow(jobId) {
+    const job = C.JOBS.find(j => j.id === jobId);
+    const el = job && C.eligibility(job, state.ctl.runs || [], state.ctl.pending, clock());
+    if (!job || !el || !el.canRun || job.policy !== 'ELIGIBLE') return;
+    const url = C.dispatchUrl(job);
+    (openUrl || ((u) => window.open(u, '_blank', 'noopener')))(url);
+    state.ctl.pending = { ...state.ctl.pending, [job.id]: clock() };
+    LS.set('cp3_research_pending', state.ctl.pending);
+    audit({ kind: 'manual-request', job: job.id, workflow: job.workflow, trigger: 'Manual', result: 'Opened GitHub Run workflow page; not yet confirmed by GitHub' });
+    schedulePoll(5000);
+    render();
+  }
+
+  function authorize(jobId) {
+    const job = C.JOBS.find(j => j.id === jobId);
+    if (!job) return;
+    const v = C.validateAuthorization(job, state.ctl.authInput[jobId]);
+    if (!v.ok) { render(); return; } // the button is disabled in this case; nothing is recorded or launched
+    // Reached only when a protected job has an execution mechanism (none does today, see docs/RESEARCH_CONTROLS.md).
+    audit(C.authorizationRecord(job, clock()));
+    render();
+  }
+
+  async function load({ force = false, cause = null } = {}) {
     if (state.loading) return state.loading;
-    if (!force && state.model && Date.now() - state.loadedAt < REFRESH_MS) { render(); return; }
+    if (!force && state.model && clock() - state.loadedAt < REFRESH_MS) { render(); return { ok: true, cached: true }; }
+    const seq = ++state.seq;
     state.loading = (async () => {
       if (!state.model) render();
       const chartJobs = [];
-      for (const coin of COINS) for (const h of HORIZONS) chartJobs.push(fetchers.chart(coin, h).then(r => [`${coin}-${h}`, r]));
+      for (const coin of COINS) for (const h of HORIZONS) chartJobs.push(fetchers.chart(coin, h).then(r => [`chart:${coin}-${h}`, r]));
       const [charts, freshness, registry, v1Latest, adaptation, hloi] = await Promise.all([
         Promise.all(chartJobs).then(Object.fromEntries), fetchers.freshness(), fetchers.registry(),
         fetchers.v1Latest(), fetchers.adaptation(), fetchers.hloi(),
       ]);
-      const now = Date.now();
-      state.model = buildModel({ charts, freshness, registry, v1Latest, adaptation, hloi }, now);
-      state.loadedAt = now; state.error = null;
-    })().catch((e) => { state.error = `Could not build the research view: ${e && e.message ? e.message : e}`; })
+      const t = clock();
+      const merged = mergeSources(state.sources, { ...charts, freshness, registry, v1Latest, adaptation, hloi }, { seq, fetchedAt: t });
+      state.sources = merged.held;
+      const prev = state.model;
+      state.model = buildModel(merged.values, t, { freshState: state.sources.freshness, sources: state.sources });
+      state.incidents = DQ.updateIncidents(state.incidents, state.sources.freshness, t);
+      LS.set('cp3_dq_incidents', state.incidents);
+      state.loadedAt = t; state.lastLoadAt = t; state.error = null;
+      if (!merged.failed.length) state.lastSuccessAt = t;
+      return { ok: !merged.failed.length, failed: merged.failed, at: t, change: summarizeModelChange(prev, state.model) };
+    })().catch((e) => { state.error = `Could not build the research view: ${e && e.message ? e.message : e}`; return { ok: false, failed: ['all'], at: clock(), error: state.error }; })
       .finally(() => { state.loading = null; render(); });
     return state.loading;
   }
 
+  async function onExecutionTransitions(transitions) {
+    const terminal = transitions.filter(x => C.TERMINAL.has(x.to));
+    const trackedTerminal = terminal.filter(x => C.JOBS.some(j => j.workflow === x.run.workflow));
+    const tracked = transitions.filter(x => C.JOBS.some(j => j.workflow === x.run.workflow));
+    if (!tracked.length) return;
+    // Interim refresh on queued/started (rate-limited); always a final refresh when a tracked run ends.
+    if (!trackedTerminal.length && clock() - state.lastLoadAt < MIN_INTERIM_REFRESH_MS) { render(); return; }
+    const res = await load({ force: true });
+    for (const x of trackedTerminal) {
+      const dq = state.model && state.model.dataQuality;
+      state.ctl.lastExecutionRefresh = {
+        runId: x.run.id, workflow: x.run.workflow, trigger: C.triggerLabel(x.run.event), state: x.to,
+        refreshOk: !!(res && res.ok), refreshedAt: res ? res.at : clock(),
+        changed: res && res.change ? res.change.changed : [], unchanged: res && res.change ? res.change.unchanged : [],
+        blocker: res && !res.ok ? `Refresh failed for ${res.failed.join(', ')}` : dq && dq.status !== 'HEALTHY' ? `Data quality: ${DQ.DQ_LABEL[dq.status]}` : null,
+      };
+      audit({ kind: 'overview-refresh', workflow: x.run.workflow, run_id: x.run.id, trigger: C.triggerLabel(x.run.event), head_sha: x.run.head_sha,
+        result: `${x.to}; Overview refresh ${res && res.ok ? 'succeeded' : 'failed'}` });
+    }
+    render();
+  }
+
+  async function poll() {
+    state.timer = null;
+    const t = clock();
+    const res = await fetchRuns({ etag: state.ctl.etag });
+    state.ctl.lastPollAt = t;
+    if (!res.ok) { state.ctl.pollError = res.error; render(); schedulePoll(); return; }
+    state.ctl.pollError = null; state.ctl.lastOkPollAt = t; state.ctl.rate = res.rate || state.ctl.rate;
+    if (!res.notModified) {
+      const prevRuns = state.ctl.runs;
+      state.ctl.runs = res.runs; state.ctl.etag = res.etag;
+      for (const [jobId, since] of Object.entries(state.ctl.pending)) {
+        const job = C.JOBS.find(j => j.id === jobId);
+        const seen = job && C.runsFor(job, res.runs).find(r => r.event === 'workflow_dispatch' && r.created_at >= since - 60000);
+        if (seen) {
+          audit({ kind: 'run-confirmed', job: jobId, workflow: job.workflow, run_id: seen.id, trigger: 'Manual', head_sha: seen.head_sha, result: `GitHub lists run #${seen.id} (${C.runState(seen).toLowerCase()})` });
+          const { [jobId]: _drop, ...rest } = state.ctl.pending; state.ctl.pending = rest;
+        } else if (t - since > C.PENDING_DISPATCH_WINDOW_MS) {
+          audit({ kind: 'manual-request', job: jobId, workflow: job && job.workflow, result: 'No run appeared on GitHub within 10 minutes; nothing was started from V3' });
+          const { [jobId]: _drop, ...rest } = state.ctl.pending; state.ctl.pending = rest;
+        }
+      }
+      LS.set('cp3_research_pending', state.ctl.pending);
+      const transitions = C.detectTransitions(prevRuns, res.runs);
+      for (const x of transitions) {
+        if (C.JOBS.some(j => j.workflow === x.run.workflow)) {
+          audit({ kind: 'run-observed', workflow: x.run.workflow, run_id: x.run.id, trigger: C.triggerLabel(x.run.event), head_sha: x.run.head_sha,
+            result: `${x.from ? x.from.toLowerCase() + ' → ' : ''}${x.to.toLowerCase()}` });
+        }
+      }
+      await onExecutionTransitions(transitions);
+    }
+    render();
+    schedulePoll();
+  }
+
+  function schedulePoll(delay) {
+    if (state.timer) clearTimeout(state.timer);
+    const active = Array.isArray(state.ctl.runs) && state.ctl.runs.some(r => C.ACTIVE.has(C.runState(r)) && C.JOBS.some(j => j.workflow === r.workflow));
+    const wait = delay ?? (active || Object.keys(state.ctl.pending).length ? POLL_ACTIVE_MS : POLL_IDLE_MS);
+    state.timer = setTimeout(() => {
+      // Poll only while the Lab is on screen and the page is visible; otherwise check again later.
+      if ((typeof document !== 'undefined' && document.hidden) || !root.isConnected || root.offsetParent === null) { schedulePoll(); return; }
+      poll();
+    }, wait);
+  }
+
   render();
-  return { load, render, state };
+  schedulePoll(0);
+  return { load, render, state, poll };
 }

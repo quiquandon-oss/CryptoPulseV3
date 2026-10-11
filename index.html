@@ -997,6 +997,18 @@
   .rd-details { margin-top:10px; } .rd-details summary { cursor:pointer; color:var(--c-accent); font-size:12.5px; font-weight:600; }
   .rd-details-body { margin-top:6px; }
   .rd-pre { background:#0B1220; border:1px solid var(--c-line); color:var(--c-text2); border-radius:8px; padding:8px; font-size:10.5px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:260px; overflow:auto; margin-top:8px; }
+  .rd-btn { margin-top:10px; background:var(--c-accent); color:#fff !important; border:0; border-radius:10px; padding:9px 14px; font-weight:700; font-size:13px; min-height:40px; }
+  .rd-btn[disabled] { background:#273349; color:var(--c-mute) !important; cursor:not-allowed; }
+  .rd-btn-ghost { background:transparent; color:var(--c-accent) !important; border:1px solid var(--c-accent); }
+  .rd-review { margin-top:10px; padding-top:10px; border-top:1px solid var(--c-line); }
+  .rd-check { display:flex; gap:8px; align-items:flex-start; margin-top:10px; font-size:13px; color:var(--c-text2); }
+  .rd-check input { margin-top:3px; width:16px; height:16px; }
+  .rd-field { display:block; margin-top:10px; font-size:12.5px; color:var(--c-text2); }
+  .rd-field input { display:block; width:100%; margin-top:6px; background:#0B1220; border:1px solid var(--c-line); border-radius:8px; color:var(--c-text); padding:9px 10px; font:13px ui-monospace,monospace; }
+  .rd-errs { color:#FCA5A5; margin-top:8px; }
+  .rd code { font:11.5px ui-monospace,monospace; overflow-wrap:anywhere; color:var(--c-text2); }
+  .rd a { color:#93C5FD; text-decoration:underline; }
+  .rd-after { margin-bottom:12px; }
   .rd-legacy-toggle { margin:0 0 16px; }
   .rd-legacy-toggle button { width:100%; text-align:left; padding:12px 14px; border-radius:12px; background:var(--lab-card,#111A2E); border:1px solid var(--lab-line,#22304D); color:#93C5FD; font-weight:600; font-size:13px; }
 </style>
@@ -2723,7 +2735,10 @@ document.getElementById('refreshBtn').onclick = async () => {
 // ============================================================
 
 async function loadLab({ force = false } = {}) {
-  if (window.ResearchDashboard) window.ResearchDashboard.load({ force });
+  if (window.ResearchDashboard) {
+    window.ResearchDashboard.load({ force });
+    if (force) window.ResearchDashboard.poll(); // Refresh Data also re-reads GitHub run status
+  }
   await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExp005(), loadExperimentRegistry(), loadPredictionFreshness()]);
   markResearchRefreshed();
   await loadComparisonPanel();
