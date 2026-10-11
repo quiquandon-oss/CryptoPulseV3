@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent, fetchExperimentRegistry, fetchExperiment5Overview, fetchExperiment5Results } from '../api/pulseworker.js';
+import { fetchChartData, fetchSelectionHistory, fetchTimesFmRecent, fetchExperimentRegistry, fetchExperiment5Overview, fetchExperiment5Results, fetchPredictionFreshness } from '../api/pulseworker.js';
 
 function mockFetchOnce(handler) {
   const original = global.fetch;
@@ -338,5 +338,65 @@ test('fetchExperiment5Results: HTTP error status -> explicit failure, not a fabr
     const result = await fetchExperiment5Results();
     assert.equal(result.ok, false);
     assert.match(result.error, /500/);
+  } finally { restore(); }
+});
+
+test('fetchExperimentRegistry: passes through new registry contract fields (display_label, eta, data_last_updated, suggested_status)', async () => {
+  const eta = { estimable: true, reached: false, progress: 10, required: 60, rate_per_day: 2, eta_date: '2026-11-05', basis: 'linear' };
+  const restore = mockFetchOnce(async () => new Response(JSON.stringify({
+    ok: true, generated_ts: 1789819245336,
+    experiments: [baseRegistryRow({
+      experiment_id: 'EXP-011', display_label: 'EXP-011 · Experiment 5 — Agentic Market Evidence', aliases: ['Experiment 5'],
+      registry_source: 'code', registry_updated_ts: 1789000000000, data_last_updated: null,
+      progress_count: 10, eta, suggested_status: 'READY_FOR_ANALYSIS', live_error: 'D1 timeout',
+    })],
+  }), { status: 200 }));
+  try {
+    const result = await fetchExperimentRegistry();
+    assert.equal(result.generated_ts, 1789819245336);
+    const e = result.experiments[0];
+    assert.equal(e.display_label, 'EXP-011 · Experiment 5 — Agentic Market Evidence');
+    assert.deepEqual(e.aliases, ['Experiment 5']);
+    assert.equal(e.registry_source, 'code');
+    assert.equal(e.data_last_updated, null);
+    assert.equal(e.registry_updated_ts, 1789000000000);
+    assert.equal(e.progress_count, 10);
+    assert.deepEqual(e.eta, eta);
+    assert.equal(e.suggested_status, 'READY_FOR_ANALYSIS');
+    assert.equal(e.status, 'ACCUMULATING');
+    assert.equal(e.live_error, 'D1 timeout');
+  } finally { restore(); }
+});
+
+test('fetchPredictionFreshness: hits /prediction-freshness and returns flattened rows', async () => {
+  let requestedUrl = null;
+  const restore = mockFetchOnce(async (url) => {
+    requestedUrl = url;
+    return new Response(JSON.stringify({
+      ok: true, generated_ts: 1, expected_cron_ticks_24h: 8,
+      coins: { BTC: { horizons: { 12: { core: { status: 'FRESH', rows_24h: 8, cron_rows_24h: 8, latest_git_commit_sha: 'abcdef1234' } } } } },
+    }), { status: 200 });
+  });
+  try {
+    const result = await fetchPredictionFreshness();
+    assert.match(String(requestedUrl), /\/prediction-freshness$/);
+    assert.equal(result.ok, true);
+    assert.equal(result.rows[0].commit, 'abcdef1');
+    assert.equal(result.rows[0].status, 'FRESH');
+  } finally { restore(); }
+});
+
+test('fetchPredictionFreshness: HTTP error / network error -> explicit failure', async () => {
+  let restore = mockFetchOnce(async () => new Response('nope', { status: 503 }));
+  try {
+    const result = await fetchPredictionFreshness();
+    assert.equal(result.ok, false);
+    assert.match(result.error, /503/);
+  } finally { restore(); }
+  restore = mockFetchOnce(async () => { throw new Error('network down'); });
+  try {
+    const result = await fetchPredictionFreshness();
+    assert.equal(result.ok, false);
+    assert.match(result.error, /network down/);
   } finally { restore(); }
 });

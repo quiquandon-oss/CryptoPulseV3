@@ -255,6 +255,18 @@ export function normalizeRegistryEntry(raw) {
     next_action: raw.next_action,
     github_refs: raw.github_refs ?? null,
     last_updated: raw.last_updated ?? null,
+    // Registry contract additions (PulseWorkerV2 c75e2ee). Passed through
+    // as-is; absent -> null, never a derived value.
+    evidence_quality: raw.evidence_quality ?? null,
+    registry_source: raw.registry_source ?? null,
+    display_label: raw.display_label ?? null,
+    aliases: Array.isArray(raw.aliases) ? raw.aliases : null,
+    registry_updated_ts: raw.registry_updated_ts ?? null,
+    data_last_updated: Number.isFinite(raw.data_last_updated) ? raw.data_last_updated : null,
+    progress_count: Number.isFinite(raw.progress_count) ? raw.progress_count : null,
+    eta: raw.eta && typeof raw.eta === 'object' ? raw.eta : null,
+    suggested_status: raw.suggested_status ?? null,
+    live_error: raw.live_error ?? null,
   };
 }
 

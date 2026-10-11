@@ -9,6 +9,7 @@
 
 import { normalizePrediction, normalizeSelection, normalizePricePoint, normalizeTimesFmForecast, normalizeRegistryEntry } from './normalize.js';
 import { isSupportedCoin, isSupportedHorizon } from './validation.js';
+import { normalizePredictionFreshness } from './research.js';
 
 export const API_BASE = 'https://pulseworker-v2.quiquandon.workers.dev';
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -147,7 +148,22 @@ export async function fetchExperimentRegistry({ apiBase = API_BASE } = {}) {
       return { ok: false, error: raw?.error || 'malformed response' };
     }
     const experiments = raw.experiments.map(normalizeRegistryEntry).filter((e) => e.available);
-    return { ok: true, experiments };
+    return { ok: true, generated_ts: Number.isFinite(raw.generated_ts) ? raw.generated_ts : null, experiments };
+  } catch (e) {
+    return { ok: false, error: describeError(e) };
+  }
+}
+
+// Operations (not science): production V2 prediction persistence health
+// per coin x horizon x core/challenger, straight from PulseWorkerV2's
+// /prediction-freshness. Statuses (FRESH/STALE/NONE) are the backend's own;
+// this adapter only flattens them into table rows.
+export async function fetchPredictionFreshness({ apiBase = API_BASE } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${apiBase}/prediction-freshness`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const raw = await res.json();
+    return normalizePredictionFreshness(raw);
   } catch (e) {
     return { ok: false, error: describeError(e) };
   }

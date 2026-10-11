@@ -221,3 +221,13 @@ test('normalizeTimesFmForecast: does not invent a confidence field -- TimesFM do
 test('normalizeTimesFmForecast: coin is carried through as-is, never assumed BTC when absent', () => {
   assert.equal(normalizeTimesFmForecast(baseTimesFmRow({ coin: null })).available, false);
 });
+
+test('normalizeRegistryEntry: new contract fields default to null when absent, never derived', () => {
+  const result = normalizeRegistryEntry(baseRegistryRow());
+  for (const f of ['display_label', 'aliases', 'registry_source', 'registry_updated_ts', 'data_last_updated', 'progress_count', 'eta', 'suggested_status', 'live_error']) {
+    assert.equal(result[f], null, f);
+  }
+  const bad = normalizeRegistryEntry(baseRegistryRow({ data_last_updated: 'yesterday', progress_count: '5' }));
+  assert.equal(bad.data_last_updated, null);
+  assert.equal(bad.progress_count, null);
+});
