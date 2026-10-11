@@ -90,10 +90,10 @@ test('overallStatus: INSUFFICIENT_DATA without resolved rows or without a testab
   assert.equal(s.status, 'INSUFFICIENT_DATA'); assert.match(s.reason, /cannot be measured yet/);
 });
 
-test('overallStatus: INCONCLUSIVE / NOT_IMPROVING / IMPROVING from evaluation results only', () => {
+test('overallStatus: INCONCLUSIVE / DETERIORATING / NOT_IMPROVING / IMPROVING from evaluation results only', () => {
   const cell = { coin: 'BTC', horizon: 24, stats: { n: 50, hits: 26, verdict: 'WITHIN_NOISE' }, trend: { verdict: 'NO_SIGNIFICANT_CHANGE' } };
   assert.equal(overallStatus([cell], null).status, 'INCONCLUSIVE');
-  assert.equal(overallStatus([{ ...cell, trend: { verdict: 'DECLINING' } }], null).status, 'NOT_IMPROVING');
+  assert.equal(overallStatus([{ ...cell, trend: { verdict: 'DECLINING' } }], null).status, 'DETERIORATING');
   assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BELOW_BASELINE' } }], null).status, 'NOT_IMPROVING');
   assert.equal(overallStatus([{ ...cell, stats: { ...cell.stats, verdict: 'BEATS_BASELINE' }, trend: { verdict: 'IMPROVING' } }], null).status, 'IMPROVING');
   // beating the baseline without a measured improvement over time is not "Improving"

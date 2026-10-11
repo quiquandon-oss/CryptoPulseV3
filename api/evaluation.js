@@ -17,6 +17,9 @@ export const LARGE_MOVE_PCT = 3;            // same 3% bar as the market-moves d
 export const MIN_LARGE_MOVES = 10;          // below this, large-move recall is "insufficient data"
 export const MIN_TREND_PER_WINDOW = 20;     // resolved predictions needed in each 30-day window
 export const TREND_WINDOW_DAYS = 30;
+// Below this many resolved predictions a series' accuracy is not shown as a
+// result (same bar as api/comparison.js PRELIMINARY_SAMPLE_THRESHOLD).
+export const MIN_ACCURACY_SAMPLES = 20;
 
 /** Rows written by the 3h cron are stamped within minutes of 00/03/.../21 UTC. */
 export function isScheduled(ts) {
@@ -119,7 +122,8 @@ const lbl = (c) => `${c.coin} ${c.horizon}h`;
 const pctTxt = (x) => `${(x * 100).toFixed(1)}%`;
 
 /**
- * Overall prediction status, one of IMPROVING | NOT_IMPROVING | INCONCLUSIVE |
+ * Overall prediction status, one of IMPROVING | DETERIORATING (significant drop over
+ * time) | NOT_IMPROVING (significantly below baseline) | INCONCLUSIVE |
  * INSUFFICIENT_DATA | DATA_QUALITY.
  * cells: [{coin, horizon, ok, error?, stats, trend}] (ok:false = series failed to load);
  * freshness: normalizePredictionFreshness output (or null when unavailable).
@@ -147,7 +151,7 @@ export function overallStatus(cells, freshness) {
   const trendable = withData.filter(c => c.trend && c.trend.verdict !== 'INSUFFICIENT_DATA');
   const pooled = withData.reduce((a, c) => ({ n: a.n + c.stats.n, hits: a.hits + c.stats.hits }), { n: 0, hits: 0 });
   const beatsTxt = beats.length ? ` ${beats.map(lbl).join(', ')} ${beats.length === 1 ? 'beats' : 'beat'} the baseline.` : '';
-  if (declining.length) return { status: 'NOT_IMPROVING', reason: `Accuracy fell significantly over the last 30 days vs the 30 days before for ${declining.map(lbl).join(', ')}.` };
+  if (declining.length) return { status: 'DETERIORATING', reason: `Accuracy fell significantly over the last 30 days vs the 30 days before for ${declining.map(lbl).join(', ')}.` };
   if (below.length && !beats.length) return { status: 'NOT_IMPROVING', reason: `Accuracy is significantly below the always-same-direction baseline for ${below.map(lbl).join(', ')}.` };
   if (improving.length && beats.length && !below.length) {
     return { status: 'IMPROVING', reason: `Accuracy rose significantly in the last 30 days vs the 30 days before (${improving.map(lbl).join(', ')}) and${beatsTxt.replace(/\.$/, '')} on ${pooled.n} resolved predictions.` };
@@ -238,7 +242,7 @@ export function whatChanged({ cells, prevCells, overall, prevOverall, experiment
   return meaningful ? out : ['No meaningful change in the last 24 hours.'];
 }
 
-export const STATUS_LABEL = { IMPROVING: 'Improving', NOT_IMPROVING: 'Not improving', INCONCLUSIVE: 'Inconclusive', INSUFFICIENT_DATA: 'Insufficient data', DATA_QUALITY: 'Data quality problem' };
+export const STATUS_LABEL = { IMPROVING: 'Improving', DETERIORATING: 'Deteriorating', NOT_IMPROVING: 'Not improving', INCONCLUSIVE: 'Inconclusive', INSUFFICIENT_DATA: 'Insufficient data', DATA_QUALITY: 'Data quality problem' };
 
 /** At most three recommendations, each tied to observed evidence or an operational blocker. */
 export function recommendations({ overall, cells, experiments, adaptation, review }) {

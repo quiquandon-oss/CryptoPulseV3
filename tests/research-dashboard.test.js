@@ -22,11 +22,11 @@ function data(over = {}) {
 
 test('Overview renders sections A–E in order with no inner app identity', () => {
   const html = renderOverview(buildModel(data(), NOW));
-  const order = ['Prediction status', 'Core metrics', 'What changed?', 'What should we do next?', 'Next review'].map(t => html.indexOf(t));
+  const order = ['Prediction status', 'Core metrics', 'What changed?', 'What should we do next?', 'Next milestone'].map(t => html.indexOf(t));
   assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `order ${order}`);
   assert.doesNotMatch(html, /CryptoPulse|rd-v3|Last refresh/);
   assert.match(html, /Insufficient data|Inconclusive|Improving|Not improving|Data quality problem/);
-  assert.match(html, /6\/6 saving on schedule/);
+  assert.match(html, /6\/6 series saving on schedule/);
   assert.match(html, /eligible for evaluation, not successful/);
 });
 
@@ -90,4 +90,22 @@ test('pool sums counts and splits scheduled vs live-fallback', () => {
   const m = buildModel(data(), NOW);
   const pl = pool(m.cells.filter(c => c.ok));
   assert.equal(pl.n + pl.pending, 240); assert.equal(pl.scheduled.n + pl.live.n, pl.n);
+});
+
+test('accuracy is not shown as a result below the minimum resolved sample; pending is counted separately', () => {
+  const d = data();
+  for (const k of Object.keys(d.charts)) d.charts[k] = { ok: true, predictions: [...Array(10)].map((_, i) => p(i)).concat([p(10, { correct: null })]) };
+  const m = buildModel(d, NOW);
+  const perf = renderPerformance(m, 'direction');
+  assert.match(perf, /Insufficient data<\/span> <span class="rd-muted">\(10 resolved of 20 needed · 1 pending\)/);
+  assert.doesNotMatch(perf, /\d+\.\d%<br><span class="rd-muted">n=10/);
+  // pooled across six series (60 resolved) the Overview does show a figure, with its n
+  assert.match(renderOverview(m), /n=60 ·/);
+});
+
+test('status hero uses the plain-language label and Next milestone falls back to Not yet estimable', () => {
+  const d = data(); d.registry.experiments = [];
+  const html = renderOverview(buildModel({ ...d, charts: Object.fromEntries(Object.keys(d.charts).map(k => [k, { ok: true, predictions: [] }])) }, NOW));
+  assert.match(html, /<p class="rd-status-v tone-info">Insufficient data<\/p>/);
+  assert.match(html, /ETA: Not yet estimable/);
 });

@@ -126,17 +126,18 @@ export function pool(cells) {
 // ---- shared pieces -----------------------------------------------------------
 
 const STATUS_UI = {
-  IMPROVING: { cls: 'status-ok', icon: '↗' },
-  NOT_IMPROVING: { cls: 'status-error', icon: '↘' },
-  INCONCLUSIVE: { cls: 'status-warning', icon: '≈' },
-  INSUFFICIENT_DATA: { cls: 'status-neutral', icon: '…' },
-  DATA_QUALITY: { cls: 'status-error', icon: '!' },
+  IMPROVING: { tone: 'tone-good', icon: '↗' },
+  DETERIORATING: { tone: 'tone-bad', icon: '↘' },
+  NOT_IMPROVING: { tone: 'tone-bad', icon: '↓' },
+  INCONCLUSIVE: { tone: 'tone-warn', icon: '≈' },
+  INSUFFICIENT_DATA: { tone: 'tone-info', icon: '…' },
+  DATA_QUALITY: { tone: 'tone-bad', icon: '!' },
 };
 const STAGE_CLS = { eligible: 'status-neutral', evaluated: 'status-ok', collecting: 'status-warning', unavailable: 'status-error',
   not_started: 'rd-badge-mute', inactive: 'rd-badge-mute', diagnostic: 'rd-badge-mute', unknown: 'rd-badge-mute' };
 const badge = (label, cls) => `<span class="status-badge rd-badge ${cls}">${esc(label)}</span>`;
-const metric = (title, value, sub) => `<div class="rd-metric"><p class="rd-metric-t">${esc(title)}</p><p class="rd-metric-v">${value}</p>${sub ? `<p class="rd-metric-s">${sub}</p>` : ''}</div>`;
-const section = (title, body, extra = '') => `<section class="rd-card"${extra}><p class="rd-h">${esc(title)}</p>${body}</section>`;
+const metric = (title, value, sub, cls = '') => `<div class="rd-metric${cls ? ' ' + cls : ''}"><p class="rd-metric-t">${esc(title)}</p><p class="rd-metric-v">${value}</p>${sub ? `<p class="rd-metric-s">${sub}</p>` : ''}</div>`;
+const section = (title, body, cls = '') => `<section class="rd-card${cls ? ' ' + cls : ''}"><p class="rd-h">${esc(title)}</p>${body}</section>`;
 const details = (summary, body) => `<details class="rd-details"><summary>${esc(summary)}</summary><div class="rd-details-body">${body}</div></details>`;
 const kv = (rows) => `<dl class="rd-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
 
@@ -156,35 +157,35 @@ export function renderOverview(m) {
   const freshCount = core.filter(r => r.status === 'FRESH').length;
   const latest = core.reduce((a, r) => (Number.isFinite(r.latest_ts) && r.latest_ts > a ? r.latest_ts : a), 0);
   const badRows = core.filter(r => r.status !== 'FRESH');
-  const freshVal = fr ? `${freshCount}/${core.length} saving on schedule` : UNAV;
+  const freshVal = fr ? `${freshCount}/${core.length} series saving on schedule` : UNAV;
   const freshSub = fr ? `${badRows.length ? `Not current: ${esc(badRows.map(r => `${r.coin} ${r.horizon}h (${r.status.toLowerCase()})`).join(', '))}. ` : ''}Latest V2 prediction ${esc(dt(latest || null))}` : `/prediction-freshness: ${esc(m.errors.freshness)}`;
   const failed = m.cells.filter(c => !c.ok);
 
   const r = m.review;
   return `
   <section class="rd-card rd-status">
-    <div class="rd-status-icon ${s.cls}">${s.icon}</div>
+    <div class="rd-status-icon ${s.tone}" aria-hidden="true">${s.icon}</div>
     <div class="rd-min0">
       <p class="rd-label">Prediction status · V2, all coins and horizons</p>
-      <p class="rd-status-v">${badge(Ev.STATUS_LABEL[m.overall.status], s.cls)}</p>
+      <p class="rd-status-v ${s.tone}">${esc(Ev.STATUS_LABEL[m.overall.status])}</p>
       <p class="rd-sub">${esc(m.overall.reason)}</p>
     </div>
   </section>
   ${section('Core metrics', `<div class="rd-grid">
-    ${metric('Directional accuracy vs baseline', p.n ? `<span class="${VERDICT_CLS[p.verdict] || ''}">${esc(pts(p.delta))}</span>` : INSUF,
-      p.n ? `${esc(pct(p.accuracy))} vs ${esc(pct(p.baseline))} always-same-direction baseline · n=${p.n} · ${esc(verdictTxt(p.verdict))}${split}` : 'No resolved predictions yet')}
+    ${metric('Directional accuracy vs baseline', p.n >= Ev.MIN_ACCURACY_SAMPLES ? `<span class="${VERDICT_CLS[p.verdict] || ''}">${esc(pts(p.delta))}</span>` : INSUF,
+      p.n >= Ev.MIN_ACCURACY_SAMPLES ? `${esc(pct(p.accuracy))} vs ${esc(pct(p.baseline))} always-same-direction baseline · n=${p.n} · ${esc(verdictTxt(p.verdict))}${split}` : `${p.n} resolved of ${Ev.MIN_ACCURACY_SAMPLES} needed`)}
     ${metric(`Large moves (≥${Ev.LARGE_MOVE_PCT}%) called`, `${sideTxt(p.largeUp, '↑')}<br>${sideTxt(p.largeDown, '↓')}`, `Recall shown only with ≥${Ev.MIN_LARGE_MOVES} moves per direction`)}
     ${metric('Calibration (Brier skill)', skill == null ? INSUF : `${skill >= 0 ? '+' : ''}${esc((skill * 100).toFixed(1))}%`, skill == null ? 'Needs ≥10 resolved per series' : `vs climatology on ${calN} resolved · >0 is better than the base rate`)}
     ${metric('Resolved / pending', `${p.resolved} / ${p.pending}`, `${p.scheduled.n} scheduled · ${p.live.n} live-fallback resolved`)}
-    ${metric('Prediction persistence', freshVal, freshSub)}
+    ${metric('Prediction persistence', freshVal, freshSub, 'rd-span')}
   </div>${failed.length ? `<p class="rd-foot">Unavailable series: ${esc(failed.map(c => `${lbl(c)} (${c.error})`).join(', '))}.</p>` : ''}`)}
-  ${section('What changed?', `<p class="rd-muted rd-mb">Compared with the evaluation as of 24 h ago, rebuilt from the same records.</p><ul class="rd-list">${m.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`)}
+  ${section('What changed?', `<p class="rd-muted rd-mb">Compared with the evaluation as of 24 h ago, rebuilt from the same records.</p><ul class="rd-list">${m.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`, 'rd-note-info')}
   ${section('What should we do next?', m.actions.length
     ? `<ol class="rd-list rd-ol">${m.actions.map(a => `<li>${a.kind === 'blocker' ? '<b>Blocker.</b> ' : ''}${esc(a.text)}</li>`).join('')}</ol>`
-    : '<p class="rd-sub">No action is indicated by the current evidence.</p>')}
-  ${section('Next review', r.date
+    : '<p class="rd-sub">No action is indicated by the current evidence.</p>', m.actions.some(a => a.kind === 'blocker') ? 'rd-note-warn' : 'rd-note-good')}
+  ${section('Next milestone', r.date
     ? `<div class="rd-row"><p class="rd-sub rd-min0">${esc(r.text)}</p><p class="rd-date">${esc(r.date)}</p></div>${r.later.length ? `<ul class="rd-list rd-mt">${r.later.map(x => `<li>${esc(x.date)} — ${esc(x.text)}</li>`).join('')}</ul>` : ''}`
-    : `<p class="rd-date">Not yet estimable</p><p class="rd-sub">${esc(r.why)}</p>`)}`;
+    : `<p class="rd-date">ETA: Not yet estimable</p><p class="rd-sub">${esc(r.why)}</p>`)}`;
 }
 
 // ---- Performance ------------------------------------------------------------------
@@ -215,10 +216,10 @@ export function renderPerformance(m, sub = 'direction') {
       : `<tr><td>${lbl(c)}</td><td>${acc(c.statsScheduled)}</td><td>${acc(c.statsLive)}</td></tr>`).join('')}</table>
       <p class="rd-foot">Scheduled = written by the 3-hourly cron (within 5 min of a 00/03/…/21 UTC tick); every other row is a live-fallback prediction. Accuracy on resolved rows of each origin.</p>`;
   } else {
-    body = `<table class="rd-table"><tr><th>Series</th><th>Accuracy</th><th>Baseline</th><th>Δ</th></tr>${m.cells.map(c => !c.ok ? fail(c, 3) : !c.stats.n
-      ? `<tr><td>${lbl(c)}</td><td colspan="3">${INSUF}</td></tr>`
-      : `<tr><td>${lbl(c)}</td><td>${esc(pct(c.stats.accuracy))}<br><span class="rd-muted">n=${c.stats.n}</span></td><td>${esc(pct(c.stats.baseline))}<br><span class="rd-muted">always ${esc(c.stats.baselineDirection)}</span></td><td><span class="${VERDICT_CLS[c.stats.verdict] || ''}">${esc(pts(c.stats.delta))}</span><br><span class="rd-muted">${esc(verdictTxt(c.stats.verdict))} · 30 d: ${esc(verdictTxt(c.trend.verdict))}</span></td></tr>`).join('')}</table>
-      <p class="rd-foot">Baseline = always predicting the series' more frequent realized direction on the same resolved rows. "Beats" requires the 95% Wilson interval to clear it. 30 d = last 30 days vs the 30 before (two-proportion test, ≥${Ev.MIN_TREND_PER_WINDOW} per window).</p>`;
+    body = `<table class="rd-table"><tr><th>Series</th><th>Accuracy</th><th>Baseline</th><th>Δ</th></tr>${m.cells.map(c => !c.ok ? fail(c, 3) : c.stats.n < Ev.MIN_ACCURACY_SAMPLES
+      ? `<tr><td>${lbl(c)}</td><td colspan="3">${INSUF} <span class="rd-muted">(${c.stats.n} resolved of ${Ev.MIN_ACCURACY_SAMPLES} needed · ${c.origin.pending} pending)</span></td></tr>`
+      : `<tr><td>${lbl(c)}</td><td>${esc(pct(c.stats.accuracy))}<br><span class="rd-muted">n=${c.stats.n} · ${c.origin.pending} pending</span></td><td>${esc(pct(c.stats.baseline))}<br><span class="rd-muted">always ${esc(c.stats.baselineDirection)}</span></td><td><span class="${VERDICT_CLS[c.stats.verdict] || ''}">${esc(pts(c.stats.delta))}</span><br><span class="rd-muted">${esc(verdictTxt(c.stats.verdict))} · 30 d: ${esc(verdictTxt(c.trend.verdict))}</span></td></tr>`).join('')}</table>
+      <p class="rd-foot">Resolved outcomes only; pending predictions are counted but never scored. Accuracy is shown from ${Ev.MIN_ACCURACY_SAMPLES} resolved predictions. Baseline = always predicting the series' more frequent realized direction on the same resolved rows. "Beats" requires the 95% Wilson interval to clear it. 30 d = last 30 days vs the 30 before (two-proportion test, ≥${Ev.MIN_TREND_PER_WINDOW} per window).</p>`;
   }
   const prov = `<p class="rd-foot rd-prov">Source: PulseWorkerV2 ${COINS.map(c => CHART_ENDPOINT[c]).join(', ')} (horizon=12H and 24H), production core predictions; loaded ${esc(dt(m.now))}.</p>`;
   return section('Prediction quality vs baseline', seg + body + prov);
@@ -279,6 +280,7 @@ export function renderExperiments(m, filter = 'all') {
 
 // ---- Factors --------------------------------------------------------------------
 
+const CAT_COLORS = { sentiment: '#3B82F6', onchain: '#22C55E', derivatives: '#F59E0B', macro: '#8B5CF6', other: '#64748B' };
 const f1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : null);
 const signed = (x) => { if (!Number.isFinite(x)) return null; const r = Math.round(x * 10) / 10 || 0; return `${r >= 0 ? '+' : ''}${r.toFixed(1)}`; };
 
@@ -308,7 +310,7 @@ export function renderFactors(m) {
   if (!a) return section('Factors', `<p class="rd-sub">${UNAV} <span class="rd-muted">(V1 /weight-adaptation: ${esc(m.errors.adaptation)})</span></p>`);
   const summary = m.factors.map(c => `<div class="rd-cat">
       <div class="rd-row"><p class="rd-cat-t">${esc(c.title)}</p><p class="rd-cat-v">${c.contributingCount}/${c.total} contributing</p></div>
-      <div class="rd-bar"><span style="width:${Math.min(100, c.effectiveSharePct).toFixed(0)}%"></span></div>
+      <div class="rd-bar"><span style="width:${Math.min(100, c.effectiveSharePct).toFixed(0)}%;--cat:${CAT_COLORS[c.key] || CAT_COLORS.other}"></span></div>
       <p class="rd-muted">Effective share ${esc(f1(c.effectiveSharePct))}% · configured ${esc(f1(c.configuredSharePct))}% · contribution ${c.contributionPts == null ? '—' : `${esc(f1(c.contributionPts))} pts (${esc(signed(c.pushPts))} vs neutral)`}</p>
     </div>`).join('');
   const reading = m.v1 ? `Latest V1 reading ${esc(dt(m.v1.ts))} · V1 composite ${m.v1.score == null ? '—' : esc(Math.round(m.v1.score))}` : `Latest V1 reading unavailable${m.errors.v1 ? ` (${esc(m.errors.v1)})` : ''}`;
