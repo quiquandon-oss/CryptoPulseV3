@@ -926,6 +926,64 @@
     border-radius: 2px;
   }
 </style>
+<style>
+  /* ---- V3 research dashboard (dark, card-based; scoped to .rd) ---- */
+  .rd { --rd-bg:#0B1220; --rd-card:#111A2E; --rd-line:#22304D; --rd-text:#E6EDF7; --rd-mute:#8A99B4; --rd-blue:#3B82F6;
+        --rd-good:#22C55E; --rd-bad:#F05252; --rd-warn:#F5B942; background:var(--rd-bg); color:var(--rd-text);
+        border-radius:20px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.4; }
+  .rd p { margin:0; }
+  .rd-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
+  .rd-title { font-size:18px; font-weight:700; }
+  .rd-v3 { background:var(--rd-good); color:#05220F; font-size:11px; padding:1px 6px; border-radius:6px; vertical-align:middle; }
+  .rd-right { text-align:right; } .rd-small { font-size:12px; }
+  .rd-muted { color:var(--rd-mute); font-size:11px; }
+  .rd-tabs { display:flex; border-bottom:1px solid var(--rd-line); margin-bottom:12px; overflow-x:auto; }
+  .rd button { border:0; background:none; font:inherit; cursor:pointer; }
+  .rd-tabs button { flex:1; padding:8px 6px; color:var(--rd-mute); font-weight:600; font-size:13px; border-bottom:2px solid transparent; white-space:nowrap; }
+  .rd-tabs button.on { color:var(--rd-blue); border-bottom-color:var(--rd-blue); }
+  .rd-card { background:var(--rd-card); border:1px solid var(--rd-line); border-radius:14px; padding:12px; margin-bottom:10px; }
+  .rd-hero { display:flex; gap:12px; align-items:center; }
+  .rd-hero-icon { width:46px; height:46px; min-width:46px; border-radius:50%; border:3px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
+  .rd-hero-v { font-size:24px; font-weight:800; }
+  .rd-label { font-size:12px; color:var(--rd-mute); }
+  .rd-sub { color:#C4CEE0; font-size:12px; margin-top:4px !important; }
+  .rd-st-good { color:var(--rd-good); } .rd-st-bad { color:var(--rd-bad); } .rd-st-warn { color:var(--rd-warn); }
+  .rd-pos { color:var(--rd-good); } .rd-neg { color:var(--rd-bad); }
+  .rd-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .rd-tile { background:var(--rd-card); border:1px solid var(--rd-line); border-radius:12px; padding:10px; min-width:0; }
+  .rd-tile-t { font-size:11px; color:var(--rd-mute); } .rd-tile-v { font-size:18px; font-weight:700; margin-top:2px !important; }
+  .rd-tile-s { font-size:10.5px; color:var(--rd-mute); margin-top:2px !important; overflow-wrap:anywhere; }
+  .rd-note-t { font-weight:700; font-size:13px; margin-bottom:4px !important; }
+  .rd-note-info { border-color:#2A4A7F; } .rd-note-warn { border-color:#7A5A12; background:#1D1A10; } .rd-note-good { border-color:#1F5F3A; background:#0F1D17; }
+  .rd-note ol { padding-left:18px; list-style:decimal; } .rd-list { padding-left:16px; list-style:disc; color:#C4CEE0; font-size:12px; }
+  .rd-row { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .rd-date { color:var(--rd-blue); font-weight:700; white-space:nowrap; }
+  .rd-h { font-weight:700; font-size:15px; margin-bottom:8px !important; }
+  .rd-seg, .rd-chips { display:flex; gap:6px; margin-bottom:10px; overflow-x:auto; padding-bottom:2px; }
+  .rd-seg, .rd-chips { flex-wrap:wrap; overflow-x:visible; }
+  .rd-seg button, .rd-chips button { background:#18233B; color:var(--rd-mute); border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .rd-seg button.on, .rd-chips button.on { background:var(--rd-blue); color:#fff; }
+  .rd-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .rd-table th { text-align:left; color:var(--rd-mute); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--rd-line); }
+  .rd-table td { padding:6px 4px; border-bottom:1px solid #18233B; vertical-align:top; overflow-wrap:anywhere; }
+  .rd-kv td:first-child { color:var(--rd-mute); width:38%; }
+  .rd-cat td { color:var(--rd-blue); font-weight:700; padding-top:10px; }
+  .rd-scroll { overflow-x:auto; } .rd-factors td, .rd-factors th { white-space:nowrap; overflow-wrap:normal; }
+  .rd-foot { color:var(--rd-mute); font-size:11px; margin-top:8px !important; }
+  .rd-badge { font-size:11px; font-weight:700; border-radius:8px; padding:2px 8px; max-width:100%; }
+  .rd-exp .rd-row { flex-wrap:wrap; }
+  .rd-b-good { background:#14532D; color:#86EFAC; } .rd-b-bad { background:#5B1A1A; color:#FCA5A5; } .rd-b-warn { background:#5A4210; color:#FCD34D; }
+  .rd-b-info { background:#1E3A6E; color:#93C5FD; } .rd-b-mute { background:#273349; color:#B6C2D6; }
+  .rd-exp-t { font-weight:700; font-size:14px; }
+  .rd-bar { height:6px; background:#22304D; border-radius:4px; overflow:hidden; margin:8px 0 2px; flex:1; }
+  .rd-bar span { display:block; height:100%; background:var(--rd-blue); border-radius:4px; }
+  .rd-barrow { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px; }
+  .rd-barrow > span:first-child { width:42%; } .rd-barrow > span:last-child { width:36px; text-align:right; } .rd-barrow .rd-bar { margin:0; }
+  .rd-group { color:var(--rd-mute); font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin:14px 2px 6px !important; }
+  .rd-pad { padding:0 2px 6px; }
+  .rd-details summary { cursor:pointer; color:var(--rd-blue); font-size:12px; margin-top:6px; }
+  .rd-legacy-toggle { margin:-6px 0 16px; } .rd-legacy-toggle button { width:100%; text-align:left; padding:10px 14px; border-radius:12px; background:#111A2E; color:#93C5FD; font-weight:600; font-size:13px; }
+</style>
 </head>
 <body class="bg-[#F8F9FA] text-[#1A1A2E] min-h-screen pb-20 md:pb-8">
 <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
@@ -1352,6 +1410,12 @@
   <!-- selection. Data loads on tab-open and on the header Refresh button   -->
   <!-- only — no auto-polling. -->
   <div id="view-lab" class="hidden">
+    <!-- Research dashboard (ui/research-dashboard.js): Overview / Performance / Experiments / Factors -->
+    <div id="researchDashboard" class="rd mt-4"></div>
+    <div id="labLegacyToggleWrap" class="rd-legacy-toggle hidden">
+      <button id="labLegacyToggle" type="button" onclick="toggleLabLegacy()">▸ Technical details — full experiment panels</button>
+    </div>
+    <div id="labLegacy" class="hidden">
     <div class="mb-4 mt-4">
       <p class="text-xs uppercase tracking-wider text-[#4A90E2] font-bold">Experiment Lab</p>
       <p class="text-xs text-[#718096] mt-0.5">Live progress on parallel-logged research variants from PulseWorkerV2. Nothing here ever changes production selection.</p>
@@ -1455,6 +1519,7 @@
       <p class="text-xs text-[#4A4A5E] mb-3 leading-relaxed">Once enough BTC forecasts have resolved, this panel will compare directional accuracy, MAE/RMSE and disagreement rate across k-NN, Challenger and TimesFM for the 12h and 24h horizons. No comparison metric is computed or displayed until there is a real, sufficient resolved sample -- a low sample size shows an explicit collecting/insufficient-data state instead of a leaderboard.</p>
       <div id="comparisonBody"><p class="text-xs text-[#718096]">Loading…</p></div>
     </section>
+    </div><!-- /labLegacy -->
   </div>
 
   <!-- VIEW 3: AI LEARNING TAB -->
@@ -1541,11 +1606,46 @@
   import { labelVariant } from './api/normalize.js';
   import * as Comparison from './api/comparison.js';
   import * as Research from './api/research.js';
+  import * as Sources from './api/sources.js';
+  import { mountResearchDashboard } from './ui/research-dashboard.js';
   window.PulseAPI = { ...PulseWorker, ...Validation, labelVariant };
   window.Research = Research;
   window.Comparison = Comparison;
+  // Research dashboard: read-only fetchers (V2 via PulseWorker, V1/V4 via api/sources.js).
+  const rdRoot = document.getElementById('researchDashboard');
+  if (rdRoot) {
+    window.ResearchDashboard = mountResearchDashboard(rdRoot, {
+      fetchers: {
+        chart: (coin, h) => PulseWorker.fetchChartData(coin, h, { days: 60 }),
+        freshness: () => PulseWorker.fetchPredictionFreshness(),
+        registry: () => PulseWorker.fetchExperimentRegistry(),
+        v1Latest: () => Sources.fetchV1Latest(),
+        adaptation: () => Sources.fetchV1WeightAdaptation(),
+        hloi: () => Sources.fetchV1HlOi(),
+        v4: () => Sources.fetchV4Performance(),
+      },
+      onTab: (tab) => {
+        const wrap = document.getElementById('labLegacyToggleWrap');
+        if (wrap) wrap.classList.toggle('hidden', tab !== 'experiments');
+        if (tab !== 'experiments' && window.setLabLegacyOpen) window.setLabLegacyOpen(false);
+      },
+    });
+  }
 </script>
 <script>
+function setLabLegacyOpen(open){
+  const el = document.getElementById('labLegacy');
+  const btn = document.getElementById('labLegacyToggle');
+  if (!el || !btn) return;
+  el.classList.toggle('hidden', !open);
+  btn.textContent = (open ? '▾' : '▸') + ' Technical details — full experiment panels';
+}
+function toggleLabLegacy(){
+  const el = document.getElementById('labLegacy');
+  setLabLegacyOpen(el && el.classList.contains('hidden'));
+}
+window.setLabLegacyOpen = setLabLegacyOpen;
+
 function toggleNote(btn, noteId){
   const el = document.getElementById(noteId);
   if(!el) return;
@@ -2593,7 +2693,7 @@ document.getElementById('refreshBtn').onclick = async () => {
     if (activeView === 'dashboard') {
       await loadAllData();
     } else if (activeView === 'lab') {
-      await loadLab();
+      await loadLab({ force: true });
     } else if (activeView === 'learning') {
       await loadLearningOverview();
     }
@@ -2606,7 +2706,8 @@ document.getElementById('refreshBtn').onclick = async () => {
 // 11. EXPERIMENT LAB (EXP-002 anomaly gate, EXP-003 momentum overlay)
 // ============================================================
 
-async function loadLab() {
+async function loadLab({ force = false } = {}) {
+  if (window.ResearchDashboard) window.ResearchDashboard.load({ force });
   await Promise.all([loadExp002(), loadExp003(), loadExp004(), loadExp005(), loadExperimentRegistry(), loadPredictionFreshness()]);
   markResearchRefreshed();
   await loadComparisonPanel();
@@ -3672,7 +3773,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // backend-aggregated) re-fetch every 30 min while the Lab tab is open.
   setInterval(async () => {
     if (activeView !== 'lab' || document.hidden) return;
-    await Promise.all([loadExperimentRegistry(), loadPredictionFreshness()]);
+    await Promise.all([loadExperimentRegistry(), loadPredictionFreshness(),
+      window.ResearchDashboard ? window.ResearchDashboard.load({ force: true }) : null]);
     markResearchRefreshed();
   }, RESEARCH_AUTO_REFRESH_MS);
 });
