@@ -115,37 +115,151 @@ export function largeMoveStats(preds, thresholdPct = LARGE_MOVE_PCT) {
   return { thresholdPct, up: side(true), down: side(false), resolvedWithReturn: r.length };
 }
 
-/** cells: [{coin, horizon, stats: directionalStats, trend: trendStats}]; freshness: normalizePredictionFreshness output. */
+const lbl = (c) => `${c.coin} ${c.horizon}h`;
+const pctTxt = (x) => `${(x * 100).toFixed(1)}%`;
+
+/**
+ * Overall prediction status, one of IMPROVING | NOT_IMPROVING | INCONCLUSIVE |
+ * INSUFFICIENT_DATA | DATA_QUALITY.
+ * cells: [{coin, horizon, ok, error?, stats, trend}] (ok:false = series failed to load);
+ * freshness: normalizePredictionFreshness output (or null when unavailable).
+ */
 export function overallStatus(cells, freshness) {
-  const stale = [];
+  const problems = [];
+  for (const c of cells) if (c.ok === false) problems.push(`${lbl(c)} predictions could not be loaded (${c.error || 'unavailable'})`);
   if (freshness && freshness.ok) {
     for (const row of freshness.rows || []) {
-      if (row.track === 'core' && (row.status === 'STALE' || row.status === 'NONE' || row.status === 'MISSING')) stale.push(`${row.coin} ${row.horizon}h`);
+      if (row.track === 'core' && (row.status === 'STALE' || row.status === 'NONE' || row.status === 'MISSING')) {
+        problems.push(`${row.coin} ${row.horizon}h core predictions are ${row.status.toLowerCase()} (not saving on schedule)`);
+      }
     }
   }
-  if (stale.length) {
-    return { status: 'BLOCKED', reason: `Predictions are not being saved on schedule for ${stale.join(', ')} — new evidence cannot accumulate until that is fixed.` };
+  if (problems.length) {
+    return { status: 'DATA_QUALITY', reason: `${problems.join('; ')}. Results for the affected series are not current, so improvement cannot be judged.`, problems };
   }
-  const withData = cells.filter(c => c.stats && c.stats.n > 0);
-  if (!withData.length) return { status: 'INCONCLUSIVE', reason: 'No resolved predictions are available yet, so there is nothing to compare with the baseline.' };
+  const ok = cells.filter(c => c.ok !== false && c.stats);
+  const withData = ok.filter(c => c.stats.n > 0);
+  if (!withData.length) return { status: 'INSUFFICIENT_DATA', reason: 'No resolved predictions are available yet, so nothing can be compared with the baseline.' };
   const beats = withData.filter(c => c.stats.verdict === 'BEATS_BASELINE');
   const below = withData.filter(c => c.stats.verdict === 'BELOW_BASELINE');
   const improving = withData.filter(c => c.trend && c.trend.verdict === 'IMPROVING');
   const declining = withData.filter(c => c.trend && c.trend.verdict === 'DECLINING');
+  const trendable = withData.filter(c => c.trend && c.trend.verdict !== 'INSUFFICIENT_DATA');
   const pooled = withData.reduce((a, c) => ({ n: a.n + c.stats.n, hits: a.hits + c.stats.hits }), { n: 0, hits: 0 });
-  const pct = (x) => `${(x * 100).toFixed(1)}%`;
-  if (declining.length || (below.length && !beats.length)) {
-    const which = (declining.length ? declining : below).map(c => `${c.coin} ${c.horizon}h`).join(', ');
-    return { status: 'NOT_IMPROVING', reason: declining.length
-      ? `Accuracy fell significantly over the last 30 days for ${which}.`
-      : `Accuracy is significantly below the always-same-direction baseline for ${which}.` };
-  }
+  const beatsTxt = beats.length ? ` ${beats.map(lbl).join(', ')} ${beats.length === 1 ? 'beats' : 'beat'} the baseline.` : '';
+  if (declining.length) return { status: 'NOT_IMPROVING', reason: `Accuracy fell significantly over the last 30 days vs the 30 days before for ${declining.map(lbl).join(', ')}.` };
+  if (below.length && !beats.length) return { status: 'NOT_IMPROVING', reason: `Accuracy is significantly below the always-same-direction baseline for ${below.map(lbl).join(', ')}.` };
   if (improving.length && beats.length && !below.length) {
-    return { status: 'IMPROVING', reason: `Accuracy rose significantly in the last 30 days (${improving.map(c => `${c.coin} ${c.horizon}h`).join(', ')}) and beats the baseline for ${beats.map(c => `${c.coin} ${c.horizon}h`).join(', ')}.` };
+    return { status: 'IMPROVING', reason: `Accuracy rose significantly in the last 30 days vs the 30 days before (${improving.map(lbl).join(', ')}) and${beatsTxt.replace(/\.$/, '')} on ${pooled.n} resolved predictions.` };
   }
-  return { status: 'INCONCLUSIVE', reason: `Pooled accuracy ${pct(pooled.hits / pooled.n)} on ${pooled.n} resolved predictions; ${beats.length
-    ? `${beats.map(c => `${c.coin} ${c.horizon}h`).join(', ')} beat${beats.length === 1 ? 's' : ''} the baseline, but there is no significant improvement over time yet.`
-    : 'no coin/horizon is distinguishable from the always-same-direction baseline yet (differences are within noise).'}` };
+  if (!trendable.length) {
+    return { status: 'INSUFFICIENT_DATA', reason: `Improvement over time cannot be measured yet: no coin/horizon has ${MIN_TREND_PER_WINDOW} resolved predictions in both the last 30 days and the 30 days before. Pooled accuracy so far ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved.${beatsTxt}` };
+  }
+  return { status: 'INCONCLUSIVE', reason: `No significant change in accuracy over the last 30 days for the ${trendable.length} series that can be tested (pooled ${pctTxt(pooled.hits / pooled.n)} on ${pooled.n} resolved).${beatsTxt || ' No series is distinguishable from the always-same-direction baseline.'}` };
+}
+
+/** The same records as they stood at `asOf`: rows created by then, resolved only if their target had passed. */
+export function predictionsAsOf(preds, asOf) {
+  return preds.filter(p => p.ts <= asOf).map(p => (isResolved(p) && Number.isFinite(p.target_ts) && p.target_ts > asOf ? { ...p, correct: null } : p));
+}
+
+/**
+ * Next point at which the 30-day trend test becomes possible for one series:
+ * the earliest date D >= now where the prior window (D-60d, D-30d] already holds
+ * MIN_TREND_PER_WINDOW predictions (all of which exist today) and the recent
+ * window is projected to, at the scheduled rate observed over the last 7 days.
+ * Returns null when not projectable (no rate, too little history).
+ */
+export function trendReadyDate(preds, now = Date.now(), windowDays = TREND_WINDOW_DAYS) {
+  const w = windowDays * DAY_MS;
+  const ts = preds.map(p => p.ts).filter(Number.isFinite).sort((a, b) => a - b);
+  if (ts.length < MIN_TREND_PER_WINDOW) return null;
+  const rate = preds.filter(p => isScheduled(p.ts) && p.ts > now - 7 * DAY_MS).length / 7; // per day
+  const countIn = (lo, hi) => ts.filter(t => t > lo && t <= hi).length;
+  const recentOk = (D) => countIn(D - w, now) + Math.max(0, (D - now) / DAY_MS) * rate >= MIN_TREND_PER_WINDOW;
+  if (countIn(now - 2 * w, now - w) >= MIN_TREND_PER_WINDOW && recentOk(now)) return now;
+  for (let i = MIN_TREND_PER_WINDOW - 1; i < ts.length; i++) {
+    const D = ts[i] + w;
+    if (D < now) continue;
+    if (countIn(D - 2 * w, D - w) >= MIN_TREND_PER_WINDOW && recentOk(D)) return D;
+  }
+  return null;
+}
+
+/** Next meaningful review, only from actual schedules / observed rates; otherwise not estimable with a reason. */
+export function nextReview({ cells, experiments, now = Date.now() }) {
+  const events = [];
+  for (const c of cells) {
+    if (c.ok === false || !c.trend || c.trend.verdict !== 'INSUFFICIENT_DATA' || !c.preds) continue;
+    const d = trendReadyDate(c.preds, now);
+    if (d != null && d > now) events.push({ ts: d, text: `30-day trend test becomes possible for ${lbl(c)} (projected from existing history and the scheduled prediction rate of the last 7 days)` });
+  }
+  for (const e of experiments || []) {
+    const eta = e.eta;
+    if (eta && eta.estimable && !eta.reached && eta.eta_date) {
+      const ts = Date.parse(eta.eta_date);
+      if (Number.isFinite(ts) && ts >= now - DAY_MS) events.push({ ts, text: `${e.experiment_id} reaches its required sample (${eta.progress ?? '—'}/${eta.required ?? '—'}; backend linear projection)` });
+    }
+  }
+  events.sort((a, b) => a.ts - b.ts);
+  if (!events.length) {
+    return { date: null, text: 'Not yet estimable', why: 'No series has a projectable date for the 30-day trend test (too little history or no scheduled predictions in the last 7 days), and no registered experiment reports an estimable ETA.', later: [] };
+  }
+  const iso = (t) => new Date(t).toISOString().slice(0, 10);
+  return { date: iso(events[0].ts), text: events[0].text, why: null, later: events.slice(1, 3).map(e => ({ date: iso(e.ts), text: e.text })) };
+}
+
+/** What changed vs the evaluation as of `asOfMs` ago, reconstructed from the same records. */
+export function whatChanged({ cells, prevCells, overall, prevOverall, experiments, now = Date.now(), sinceMs = DAY_MS }) {
+  const out = [];
+  if (prevOverall && overall && prevOverall.status !== overall.status) {
+    out.push(`Status changed from ${STATUS_LABEL[prevOverall.status] || prevOverall.status} to ${STATUS_LABEL[overall.status] || overall.status}.`);
+  }
+  const byKey = new Map((prevCells || []).map(c => [lbl(c), c]));
+  let newly = 0; const per = [], bigMoves = [];
+  for (const c of cells) {
+    if (c.ok === false || !c.stats) continue;
+    const p = byKey.get(lbl(c));
+    const d = c.stats.n - (p && p.stats ? p.stats.n : 0);
+    if (d > 0) { newly += d; per.push(`${lbl(c)} +${d}`); }
+    if (p && p.stats && p.stats.verdict !== c.stats.verdict && p.stats.n && c.stats.n) {
+      out.push(`${lbl(c)}: ${p.stats.verdict.replace(/_/g, ' ').toLowerCase()} → ${c.stats.verdict.replace(/_/g, ' ').toLowerCase()} (${pctTxt(p.stats.accuracy)} → ${pctTxt(c.stats.accuracy)}).`);
+    }
+    if (c.preds) {
+      const big = c.preds.filter(x => isResolved(x) && Number.isFinite(x.actualMove) && Math.abs(x.actualMove) >= LARGE_MOVE_PCT && Number.isFinite(x.target_ts) && x.target_ts > now - sinceMs);
+      if (big.length) bigMoves.push(`${lbl(c)} ${big.filter(x => x.direction === (x.actualMove > 0 ? 'UP' : 'DOWN')).length}/${big.length}`);
+    }
+  }
+  if (bigMoves.length) out.push(`Large moves (≥${LARGE_MOVE_PCT}%) resolved, called in the right direction: ${bigMoves.join(', ')}.`);
+  out.unshift(newly ? `${newly} prediction(s) resolved (${per.join(', ')}).` : 'No predictions resolved in this period.');
+  const fresh = (experiments || []).filter(e => Number.isFinite(e.data_last_updated) && e.data_last_updated > now - sinceMs).map(e => e.experiment_id);
+  if (fresh.length) out.push(`New experiment data recorded for ${fresh.join(', ')}.`);
+  const meaningful = out.length > 1 || newly > 0;
+  return meaningful ? out : ['No meaningful change in the last 24 hours.'];
+}
+
+export const STATUS_LABEL = { IMPROVING: 'Improving', NOT_IMPROVING: 'Not improving', INCONCLUSIVE: 'Inconclusive', INSUFFICIENT_DATA: 'Insufficient data', DATA_QUALITY: 'Data quality problem' };
+
+/** At most three recommendations, each tied to observed evidence or an operational blocker. */
+export function recommendations({ overall, cells, experiments, adaptation, review }) {
+  const out = [];
+  for (const p of (overall && overall.problems) || []) out.push({ kind: 'blocker', text: `Fix: ${p}. Evidence for that series is not accumulating until it is resolved.` });
+  for (const e of (experiments || []).filter(x => x.suggested_status === 'READY_FOR_ANALYSIS')) {
+    out.push({ kind: 'evidence', text: `Run the planned evaluation for ${e.experiment_id} (${e.progress_count ?? '—'}/${e.required_sample ?? '—'} samples). Meeting the threshold makes it eligible for evaluation, not successful.` });
+  }
+  for (const c of cells.filter(x => x.ok !== false && x.stats && x.stats.verdict === 'BELOW_BASELINE')) {
+    out.push({ kind: 'evidence', text: `Review ${lbl(c)}: ${pctTxt(c.stats.accuracy)} is significantly below the always-${c.stats.baselineDirection} baseline (${pctTxt(c.stats.baseline)}, n=${c.stats.n}).` });
+  }
+  for (const c of cells.filter(x => x.ok !== false && x.trend && x.trend.verdict === 'DECLINING')) {
+    out.push({ kind: 'evidence', text: `Investigate ${lbl(c)}: accuracy fell from ${pctTxt(c.trend.prior)} to ${pctTxt(c.trend.recent)} (p=${c.trend.p.toFixed(3)}).` });
+  }
+  const v = adaptation && adaptation.evaluation;
+  if (v && v.verdict === 'IMPROVED') out.push({ kind: 'evidence', text: `Owner review of the proposed V1 weights: shadow ${v.shadow_hit_pct.toFixed(1)}% vs default ${v.baseline_hit_pct.toFixed(1)}% hit rate on ${v.samples_after} later samples (decision stays in V1).` });
+  if (v && v.verdict === 'WORSE') out.push({ kind: 'evidence', text: 'Keep V1 default weights: the shadow proposal did worse than the defaults on later data.' });
+  if (!out.length && overall && overall.status === 'INSUFFICIENT_DATA' && review && review.date) {
+    out.push({ kind: 'evidence', text: `Keep collecting: ${review.text.charAt(0).toLowerCase()}${review.text.slice(1)} on ${review.date}.` });
+  }
+  return out.slice(0, 3);
 }
 
 // ---- Experiments -----------------------------------------------------------
@@ -153,10 +267,10 @@ export function overallStatus(cells, freshness) {
 export const EXPERIMENT_GROUPS = [
   { key: 'models', title: 'Prediction models & selection', ids: ['EXP-002', 'EXP-003', 'EXP-004', 'EXP-008'] },
   { key: 'sentiment', title: 'Sentiment effectiveness & weighting', ids: ['EXP-005', 'EXP-006', 'EXP-007', 'EXP-025'] },
-  { key: 'signals', title: 'New market signals', ids: ['EXP-024', 'EXP-026', 'EXP-027', 'EXP-028'] },
+  { key: 'signals', title: 'New market signals', ids: ['EXP-011', 'EXP-024', 'EXP-026', 'EXP-027', 'EXP-028'] },
   { key: 'combined', title: 'Combined-factor evaluation', ids: [] },
   { key: 'largemoves', title: 'Large-move early warning', ids: ['EXP-023', 'EXP-001'] },
-  { key: 'controls', title: 'Controls & diagnostics', ids: ['EXP-009', 'EXP-010', 'EXP-011', 'EXP-012'] },
+  { key: 'controls', title: 'Controls & diagnostics', ids: ['EXP-009', 'EXP-010', 'EXP-012'] },
 ];
 
 /** Group registry entries; ids are preserved, unknown ids land in "Other". */
@@ -169,22 +283,20 @@ export function groupExperiments(experiments) {
   return groups;
 }
 
-/** Scientific evidence status, kept separate from operational status. */
-export function evidenceStatus(e) {
+/**
+ * Stage of an experiment, from registry fields only (no parsing of free text).
+ * A met sample threshold means eligible for evaluation, never success.
+ */
+export function experimentStage(e) {
   if (!e) return { key: 'unknown', label: 'Unknown' };
   if (e.live_error) return { key: 'unavailable', label: 'Data unavailable' };
+  if (e.conclusion) return { key: 'evaluated', label: 'Evaluated' };
   const st = String(e.status || '').toUpperCase();
-  const concl = String(e.conclusion || '').toLowerCase();
-  if (concl) {
-    if (/not replicat|no (incremental|significant)|fail|negative|worse|reject/.test(concl)) return { key: 'negative', label: 'Negative' };
-    if (/improv|outperform|significant|promising|support/.test(concl)) return { key: 'promising', label: 'Promising' };
-    return { key: 'inconclusive', label: 'Inconclusive' };
-  }
+  if (e.suggested_status === 'READY_FOR_ANALYSIS') return { key: 'eligible', label: 'Eligible for evaluation' };
   if (st === 'PROPOSED') return { key: 'not_started', label: 'Not started' };
-  if (st === 'BUILT_NOT_ACTIVATED' || st === 'STAGING_ONLY') return { key: 'blocked', label: 'Not active in production' };
-  if (e.suggested_status === 'READY_FOR_ANALYSIS') return { key: 'ready', label: 'Ready for analysis (not yet evaluated)' };
-  if (st === 'ON_DEMAND_AUDIT') return { key: 'diagnostic', label: 'Diagnostic only' };
-  return { key: 'insufficient', label: 'Insufficient data' };
+  if (st === 'BUILT_NOT_ACTIVATED' || st === 'STAGING_ONLY') return { key: 'inactive', label: 'Not active in production' };
+  if (st === 'ON_DEMAND_AUDIT') return { key: 'diagnostic', label: 'Diagnostic (on demand)' };
+  return { key: 'collecting', label: 'Collecting data' };
 }
 
 export function operationalStatus(e) {
@@ -204,30 +316,70 @@ export const FACTOR_CATEGORIES = [
 ];
 
 /**
- * One row per V1 source with the four quantities kept separate:
- * raw score, configured weight x confidence, effective share of the V1
- * composite, contribution to the latest V1 composite. Incremental value to
- * V3 predictions is not computed anywhere yet and is reported as such.
+ * One entry per V1 source with four quantities kept separate:
+ *  - configured weight (weight x confidence, from V1's defaults),
+ *  - effective share: that weight renormalised over the sources present in the
+ *    latest V1 reading (V1's own computeComposite arithmetic),
+ *  - observed contribution: points of the latest composite it supplied,
+ *  - measured predictive value: V1's leave-one-out change in next-24h BTC hit
+ *    rate, only when it has at least policy.minSamples spaced samples.
+ * A source absent from the reading (or hloi whenever /hl-oi is not OK) is
+ * excluded: zero share, no contribution, weight redistributed to the others.
  */
-export function factorRows(adaptation, latestSources, evidence) {
+export function factorRows(adaptation, reading, evidence, hloi) {
   const defaults = (adaptation && adaptation.defaults) || {};
-  const shares = (adaptation && adaptation.default_shares_pct) || {};
+  const configuredShares = (adaptation && adaptation.default_shares_pct) || {};
+  const minSamples = (adaptation && adaptation.policy && adaptation.policy.minSamples) || 30;
+  const minDelta = (adaptation && adaptation.policy && adaptation.policy.minDeltaPts) || 2;
+  const values = (reading && reading.sources) || {};
+  const hloiExcluded = !hloi || hloi.status !== 'OK';
+  const excludedReason = (id) => {
+    if (id === 'hloi' && hloiExcluded) return `Collecting history (${hloi && hloi.status ? hloi.status.replace(/_/g, ' ').toLowerCase() : 'status unavailable'}); excluded from the composite until 24h of history exists`;
+    if (!reading) return 'Latest V1 reading unavailable';
+    if (!Number.isFinite(values[id])) return 'No value in the latest V1 reading; excluded, weight redistributed';
+    return null;
+  };
   const ids = Object.keys(defaults);
+  const present = ids.filter(id => !excludedReason(id));
+  const wc = (id) => defaults[id][0] * defaults[id][1];
+  const totalPresent = present.reduce((a, id) => a + wc(id), 0);
+  const rows = ids.map(id => {
+    const reason = excludedReason(id);
+    const share = !reason && totalPresent > 0 ? wc(id) / totalPresent * 100 : null;
+    const raw = Number.isFinite(values[id]) && !(id === 'hloi' && hloiExcluded) ? values[id] : null;
+    const ev = evidence && evidence[id];
+    const measured = ev && Number.isFinite(ev.delta_pts) && ev.samples >= minSamples;
+    return {
+      id, weight: defaults[id][0], confidence: defaults[id][1], configuredWeight: wc(id),
+      configuredSharePct: Number.isFinite(configuredShares[id]) ? configuredShares[id] : null,
+      contributing: !reason, excludedReason: reason, rawScore: raw,
+      effectiveSharePct: share,
+      contributionPts: share != null && raw != null ? raw * share / 100 : null,
+      pushPts: share != null && raw != null ? (raw - 50) * share / 100 : null,
+      predictive: measured
+        ? { status: Math.abs(ev.delta_pts) >= minDelta ? (ev.delta_pts > 0 ? 'helps' : 'hurts') : 'no_effect', deltaPts: ev.delta_pts, samples: ev.samples, hitWith: ev.hit_with, hitWithout: ev.hit_without }
+        : { status: 'insufficient', samples: ev && Number.isFinite(ev.samples) ? ev.samples : 0, required: minSamples },
+      evidenceRaw: ev || null,
+      v3IncrementalValue: null,
+    };
+  });
   const known = new Set(FACTOR_CATEGORIES.flatMap(c => c.ids));
   const cats = [...FACTOR_CATEGORIES, { key: 'other', title: 'Other', ids: ids.filter(id => !known.has(id)) }];
-  return cats.map(c => ({
-    key: c.key, title: c.title,
-    sharePct: c.ids.reduce((a, id) => a + (shares[id] || 0), 0),
-    rows: c.ids.filter(id => defaults[id]).map(id => {
-      const raw = latestSources && Number.isFinite(latestSources[id]) ? latestSources[id] : null;
-      const share = Number.isFinite(shares[id]) ? shares[id] : null;
-      const ev = evidence && evidence[id];
-      return { id, rawScore: raw, configuredWeight: defaults[id][0], confidence: defaults[id][1], effectiveSharePct: share,
-        compositePoints: raw != null && share != null ? raw * share / 100 : null,
-        v1LeaveOneOut: ev && Number.isFinite(ev.delta_pts) ? { deltaPts: ev.delta_pts, samples: ev.samples } : null,
-        v3IncrementalValue: null };
-    }),
-  })).filter(c => c.rows.length);
+  return cats.map(c => {
+    const r = c.ids.map(id => rows.find(x => x.id === id)).filter(Boolean);
+    const contrib = r.filter(x => x.contributing);
+    return { key: c.key, title: c.title, rows: r, total: r.length, contributingCount: contrib.length,
+      configuredSharePct: r.reduce((a, x) => a + (x.configuredSharePct || 0), 0),
+      effectiveSharePct: contrib.reduce((a, x) => a + (x.effectiveSharePct || 0), 0),
+      contributionPts: contrib.some(x => x.contributionPts != null) ? contrib.reduce((a, x) => a + (x.contributionPts || 0), 0) : null,
+      pushPts: contrib.some(x => x.pushPts != null) ? contrib.reduce((a, x) => a + (x.pushPts || 0), 0) : null };
+  }).filter(c => c.rows.length);
+}
+
+/** Composite rebuilt from the rows (V1 arithmetic, without the Foufi driver boost) — a consistency check against V1's stored score. */
+export function reconstructedComposite(categories) {
+  const rows = categories.flatMap(c => c.rows).filter(r => r.contributionPts != null);
+  return rows.length ? rows.reduce((a, r) => a + r.contributionPts, 0) : null;
 }
 
 export function adaptationNextAction(adaptation) {
@@ -252,7 +404,7 @@ export function adaptationEvidence(adaptation) {
  * next-24h BTC direction; V3 predictions do not consume V1 factors, so their
  * incremental value to V3 is reported as not measured.
  */
-export function combinedFactorCard(adaptation, now = Date.now()) {
+export function combinedFactorCard(adaptation) {
   const q = 'Does the combined V1 composite call the next-24h BTC direction better with each factor than without it?';
   if (!adaptation) return { question: q, finding: 'V1 weight-adaptation report unavailable.', evidence: { key: 'unavailable', label: 'Data unavailable' }, next: 'Retry when V1 is reachable.', eta: null, v3: 'Not measured' };
   const { evidence, n_samples, persisted } = adaptationEvidence(adaptation);
@@ -273,57 +425,10 @@ export function combinedFactorCard(adaptation, now = Date.now()) {
   if (v === 'IMPROVED') ev = { key: 'promising', label: 'Improved out of sample' };
   else if (v === 'WORSE') ev = { key: 'negative', label: 'Worse out of sample' };
   else if (v === 'NO_DIFFERENCE') ev = { key: 'inconclusive', label: 'No out-of-sample difference' };
-  const perDay = pol.sampleSpacingHours ? 24 / pol.sampleSpacingHours : null;
-  let eta = null;
-  if (n_samples != null && n_samples < min && perDay) {
-    eta = new Date(now + Math.ceil((min - n_samples) / perDay) * DAY_MS).toISOString().slice(0, 10);
-  }
-  return { question: q, finding, evidence: ev, next: adaptationNextAction(adaptation), eta,
+  // V1 readings are written when V1 is used (plus the V2 archive), not on a
+  // fixed schedule, so no sample-accrual rate is guaranteed: no ETA is projected.
+  const eta = null;
+  const etaWhy = n_samples != null && n_samples >= min ? null : 'V1 readings are not recorded on a fixed schedule, so no sample-accrual rate can be projected.';
+  return { question: q, finding, evidence: ev, next: adaptationNextAction(adaptation), eta, etaWhy,
     persisted, v3: 'Not measured — V3 predictions do not use V1 factors yet' };
-}
-
-// ---- Daily summary -----------------------------------------------------------
-
-/** Compact snapshot for "what changed since your last visit". */
-export function snapshotOf(model) {
-  return {
-    ts: model.now, status: model.overall.status,
-    resolved: model.cells.reduce((a, c) => a + (c.stats ? c.stats.n : 0), 0),
-    ready: (model.experiments || []).filter(e => e.suggested_status === 'READY_FOR_ANALYSIS').map(e => e.experiment_id).sort(),
-    statuses: Object.fromEntries((model.experiments || []).map(e => [e.experiment_id, e.status])),
-  };
-}
-
-export function diffSnapshots(prev, cur) {
-  if (!prev) return ['First visit on this browser — changes will be listed from your next visit.'];
-  const out = [];
-  if (prev.status !== cur.status) out.push(`Overall status changed from ${prev.status.replace('_', ' ').toLowerCase()} to ${cur.status.replace('_', ' ').toLowerCase()}.`);
-  if (cur.resolved > prev.resolved) out.push(`${cur.resolved - prev.resolved} more prediction(s) resolved.`);
-  for (const id of cur.ready) if (!prev.ready.includes(id)) out.push(`${id} now has enough data to analyse.`);
-  for (const [id, st] of Object.entries(cur.statuses)) if (prev.statuses[id] && prev.statuses[id] !== st) out.push(`${id}: ${prev.statuses[id]} → ${st}.`);
-  return out.length ? out : ['No meaningful change since your last visit.'];
-}
-
-/** Deterministic finding / limitation / next actions / milestone from live data. */
-export function dailyFindings({ overall, cells, experiments, hloi, adaptation, now = Date.now() }) {
-  const exps = experiments || [];
-  const ready = exps.filter(e => e.suggested_status === 'READY_FOR_ANALYSIS');
-  const best = cells.filter(c => c.stats && c.stats.n > 0).sort((a, b) => (b.stats.delta ?? -1) - (a.stats.delta ?? -1))[0];
-  let finding;
-  if (overall.status === 'BLOCKED') finding = overall.reason;
-  else if (best && best.stats.verdict === 'BEATS_BASELINE') finding = `${best.coin} ${best.horizon}h predictions beat the baseline: ${(best.stats.accuracy * 100).toFixed(1)}% vs ${(best.stats.baseline * 100).toFixed(1)}% on ${best.stats.n} resolved.`;
-  else if (ready.length) finding = `${ready.map(e => e.experiment_id).join(', ')} ${ready.length === 1 ? 'has' : 'have'} collected the required sample and can now be evaluated.`;
-  else finding = overall.reason;
-  let limitation;
-  if (hloi && hloi.status && hloi.status !== 'OK') limitation = `Hyperliquid OI (new V1 source) is still collecting history (${hloi.status.replace(/_/g, ' ').toLowerCase()}); it is excluded from the composite until it has 24h of data.`;
-  else if (overall.status !== 'IMPROVING') limitation = 'Resolved samples are still too small to show a statistically significant improvement.';
-  else limitation = 'Improvement is measured on recent data only; it still needs to persist out of sample.';
-  const actions = [];
-  for (const e of ready.slice(0, 2)) actions.push(`Run the planned evaluation for ${e.experiment_id} (${e.title || e.display_label}).`);
-  if (actions.length < 2 && adaptation) actions.push(`Automatic V1 weighting: ${adaptationNextAction(adaptation).toLowerCase()}.`);
-  if (actions.length < 2) actions.push('Keep collecting resolved predictions; re-check the baseline comparison daily.');
-  const dated = exps.filter(e => e.eta && e.eta.estimable && !e.eta.reached && e.eta.eta_date).sort((a, b) => a.eta.eta_date.localeCompare(b.eta.eta_date));
-  const milestone = dated.length ? { date: dated[0].eta.eta_date, text: `${dated[0].experiment_id} reaches its required sample (${dated[0].eta.progress}/${dated[0].eta.required}; linear projection)` }
-    : { date: null, text: 'No milestone date is estimable yet from the observed data rates.' };
-  return { finding, limitation, actions: actions.slice(0, 2), milestone };
 }

@@ -1,48 +1,83 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModel, renderOverview, renderPerformance, renderExperiments, renderFactors, pool } from '../ui/research-dashboard.js';
-import { DAY_MS } from '../api/evaluation.js';
+import { buildModel, renderOverview, renderPerformance, renderExperiments, renderFactors, pool, PERF_TABS } from '../ui/research-dashboard.js';
 
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
-const p = (i, o = {}) => ({ ts: Date.UTC(2026, 9, 1) + i * 3 * 3600000, direction: 'UP', p_up: 0.6, correct: i % 2 === 0, actualMove: i % 5 === 0 ? 4 : 0.5, ...o });
+const H = 3600000;
+const p = (i, o = {}) => { const ts = Date.UTC(2026, 9, 1) + i * 3 * H; return { ts, target_ts: ts + 24 * H, direction: 'UP', p_up: 0.6, correct: i % 2 === 0, actualMove: i % 5 === 0 ? 4 : 0.5, ...o }; };
 const ADAPT = { ok: true, mode: 'shadow', policy: { minFactor: 0.5, maxFactor: 1.5, maxStepPct: 10, maxSharePct: 20, minSamples: 30, minDeltaPts: 2, sampleSpacingHours: 6 },
-  defaults: { fng: [2, 1], funding: [1, 1] }, default_shares_pct: { fng: 66.7, funding: 33.3 }, latest: null,
+  defaults: { fng: [2, 1], funding: [1, 1], hloi: [4, 0.3] }, default_shares_pct: { fng: 46.5, funding: 23.3, hloi: 30.2 }, latest: null,
   preview: { persisted: false, n_samples: 8, evidence: {}, reason: 'insufficient evidence: 8 of 30' }, evaluation: null, history: [] };
+const FRESH = { ok: true, rows: ['BTC', 'ETH', 'LINK'].flatMap(coin => ['12', '24'].map(horizon => ({ coin, horizon, track: 'core', status: 'FRESH', latest_ts: NOW - H }))) };
 
 function data(over = {}) {
   const charts = {};
   for (const c of ['BTC', 'ETH', 'LINK']) for (const h of [12, 24]) charts[`${c}-${h}`] = { ok: true, predictions: [...Array(40)].map((_, i) => p(i)) };
-  return { charts, freshness: { ok: true, rows: [] }, registry: { ok: true, experiments: [
-    { experiment_id: 'EXP-004', title: 'TimesFM', research_question: 'Q?', next_action: 'collect', status: 'ACCUMULATING', suggested_status: 'READY_FOR_ANALYSIS', progress_count: 34, required_sample: 30 },
-  ] }, v1Latest: { ok: true, ts: NOW, score: 52, sources: { fng: 60 } }, adaptation: ADAPT, hloi: { status: 'INSUFFICIENT_HISTORY' }, v4: { ok: true, rows: [] }, ...over };
+  return { charts, freshness: FRESH, registry: { ok: true, experiments: [
+    { experiment_id: 'EXP-004', title: 'TimesFM', display_label: 'EXP-004 · TimesFM challenger', research_question: 'Does TimesFM beat k-NN? Second sentence here.', baseline: 'k-NN', next_action: 'Run the evaluation', status: 'ACCUMULATING', suggested_status: 'READY_FOR_ANALYSIS', progress_count: 34, required_sample: 30, eta: { estimable: true, reached: true }, confidence_evidence_maturity: 'LOW', current_measured_result: 'NOT_AVAILABLE', conclusion: null },
+    { experiment_id: 'EXP-005', title: 'V1 Source / Coefficient Research', research_question: 'Which V1 sources help?', next_action: 'n', status: 'ACCUMULATING' },
+    { experiment_id: 'EXP-011', title: 'Experiment 5 -- Agentic Market Evidence', display_label: 'EXP-011 · Experiment 5 — Agentic Market Evidence', research_question: 'Agentic?', next_action: 'n', status: 'BUILT_NOT_ACTIVATED' },
+  ] }, v1Latest: { ok: true, ts: NOW, score: 52, sources: { fng: 60, funding: 40 } }, adaptation: ADAPT, hloi: { ok: true, status: 'INSUFFICIENT_HISTORY' }, ...over };
 }
 
-test('buildModel + every view renders from live-shaped data without invented numbers', () => {
-  const m = buildModel(data(), NOW);
-  assert.equal(m.cells.length, 6);
-  const ov = renderOverview(m, ['x']);
-  assert.match(ov, /Inconclusive|Improving|Not improving|Blocked/);
-  assert.match(ov, /↓ —/); // no down moves: gated, not 0%
-  for (const sub of ['direction', 'large', 'calibration', 'origin', 'regime']) assert.ok(renderPerformance(m, sub).length > 100);
-  assert.match(renderPerformance(m, 'regime'), /unavailable/);
-  const ex = renderExperiments(m);
-  assert.match(ex, /EXP-004/); assert.match(ex, /Combined factors/); assert.match(ex, /Ready for analysis/);
-  const fa = renderFactors(m);
-  assert.match(fa, /Shadow mode/); assert.match(fa, /not measured/); assert.match(fa, /No scheduled run yet/);
+test('Overview renders sections A–E in order with no inner app identity', () => {
+  const html = renderOverview(buildModel(data(), NOW));
+  const order = ['Prediction status', 'Core metrics', 'What changed?', 'What should we do next?', 'Next review'].map(t => html.indexOf(t));
+  assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `order ${order}`);
+  assert.doesNotMatch(html, /CryptoPulse|rd-v3|Last refresh/);
+  assert.match(html, /Insufficient data|Inconclusive|Improving|Not improving|Data quality problem/);
+  assert.match(html, /6\/6 saving on schedule/);
+  assert.match(html, /eligible for evaluation, not successful/);
 });
 
-test('a failed V2 series renders Unavailable and the overall status is BLOCKED when nothing loads', () => {
-  const d = data();
-  d.charts['ETH-12'] = { ok: false, error: 'HTTP 500' };
+test('a stale core series makes the status a data quality problem and the first recommendation a blocker', () => {
+  const fr = { ...FRESH, rows: FRESH.rows.map(r => (r.coin === 'ETH' && r.horizon === '12' ? { ...r, status: 'STALE' } : r)) };
+  const m = buildModel(data({ freshness: fr }), NOW);
+  assert.equal(m.overall.status, 'DATA_QUALITY');
+  assert.equal(m.actions[0].kind, 'blocker');
+  assert.match(renderOverview(m), /Data quality problem/);
+});
+
+test('persistence check unavailable renders Unavailable, not a fabricated count', () => {
+  const html = renderOverview(buildModel(data({ freshness: { ok: false, error: 'timeout' } }), NOW));
+  assert.match(html, /Prediction persistence<\/p><p class="rd-metric-v"><span class="rd-muted">Unavailable/);
+});
+
+test('every Performance sub-view renders; a failed series shows Unavailable; provenance is stated', () => {
+  const d = data(); d.charts['ETH-12'] = { ok: false, error: 'HTTP 500' };
   const m = buildModel(d, NOW);
-  assert.match(renderPerformance(m, 'direction'), /ETH 12h<\/td><td colspan="4"><span class="rd-muted">Unavailable/);
-  const none = buildModel({ ...d, charts: {} }, NOW);
-  assert.equal(none.overall.status, 'BLOCKED');
+  for (const [k] of PERF_TABS) {
+    const h = renderPerformance(m, k);
+    assert.match(h, /ETH 12h<\/td><td colspan="\d"><span class="rd-muted">Unavailable/, k);
+    assert.match(h, /Source: PulseWorkerV2/);
+  }
+  assert.doesNotMatch(renderPerformance(m, 'direction'), /V4|regime/i);
 });
 
-test('V1 adaptation outage shows Unavailable in Factors, not a fabricated table', () => {
-  const m = buildModel(data({ adaptation: { ok: false, error: 'timeout' } }), NOW);
-  assert.match(renderFactors(m), /Unavailable.*timeout/);
+test('Experiment cards: one-sentence question, eligible badge, collapsed raw JSON, EXP-005 and EXP-011 kept distinct', () => {
+  const html = renderExperiments(buildModel(data(), NOW));
+  assert.match(html, /<p class="rd-sub">Does TimesFM beat k-NN\?<\/p>/);
+  assert.match(html, /Eligible for evaluation/);
+  assert.match(html, /Sample threshold met — eligible for evaluation, not a result/);
+  assert.match(html, /<details class="rd-details"><summary>Technical details<\/summary>/);
+  assert.doesNotMatch(html, /<details[^>]* open/);
+  assert.match(html, /EXP-011 · Experiment 5 — Agentic Market Evidence/);
+  assert.match(html, /EXP-005 · V1 Source \/ Coefficient Research/);
+});
+
+test('Factors: stacked source cards, hloi shown as Collecting with no contribution, no weight controls', () => {
+  const html = renderFactors(buildModel(data(), NOW));
+  assert.doesNotMatch(html, /<table/);
+  assert.match(html, /class="rd-src-grid"/);
+  const hloi = html.slice(html.indexOf('<p class="rd-src-t">hloi</p>'));
+  const card = hloi.slice(0, hloi.indexOf('</article>'));
+  assert.match(card, /Collecting/); assert.match(card, /0% — excluded/); assert.doesNotMatch(card, / pts <span/);
+  assert.doesNotMatch(html, /<input|<button[^>]*apply|Apply proposed/i);
+  assert.match(html, /V3: not measured/);
+});
+
+test('V1 adaptation outage shows Unavailable in Factors', () => {
+  assert.match(renderFactors(buildModel(data({ adaptation: { ok: false, error: 'timeout' } }), NOW)), /Unavailable.*timeout/);
 });
 
 test('HTML from backend strings is escaped', () => {
@@ -51,8 +86,8 @@ test('HTML from backend strings is escaped', () => {
   assert.doesNotMatch(renderExperiments(buildModel(d, NOW)), /<img/);
 });
 
-test('pool sums counts rather than averaging averages', () => {
+test('pool sums counts and splits scheduled vs live-fallback', () => {
   const m = buildModel(data(), NOW);
   const pl = pool(m.cells.filter(c => c.ok));
-  assert.equal(pl.n, 240); assert.equal(pl.resolved + pl.pending, 240);
+  assert.equal(pl.n + pl.pending, 240); assert.equal(pl.scheduled.n + pl.live.n, pl.n);
 });

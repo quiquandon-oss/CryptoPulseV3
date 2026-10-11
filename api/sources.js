@@ -1,17 +1,14 @@
-// api/sources.js -- read-only adapters for the two other products V3 observes.
+// api/sources.js -- read-only adapters for V1 data shown in V3's Factors tab.
 //
 // V1 (PulseWorker, sentiment-ff75): composite history, the shadow weight
 // adaptation report, and the Hyperliquid OI reading. V3 only READS these; it
-// never posts weights, overrides, or model choices back to V1.
-//
-// V4 (cryptopulse-v4): only the public /api/performance aggregate. V3 must
-// never call /api/portfolio* (private holdings, token-gated).
+// never posts weights, overrides, or model choices back to V1. V1 owns
+// sentiment scoring and source weights; V4 is a separate product and is not
+// read here.
 
 import { fetchWithTimeout } from './pulseworker.js';
 
 export const V1_API_BASE = 'https://sentiment-ff75.quiquandon.workers.dev';
-export const V4_API_BASE = 'https://cryptopulse-v4.quiquandon.workers.dev';
-export const V4_COINS = ['BTC', 'ETH', 'LINK'];
 
 const errText = (e) => (e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e));
 
@@ -53,20 +50,4 @@ export async function fetchV1HlOi({ apiBase = V1_API_BASE } = {}) {
   const r = await getJson(`${apiBase}/hl-oi`);
   if (!r.ok) return r;
   return r.body && typeof r.body.status === 'string' ? r.body : { ok: false, error: 'malformed response' };
-}
-
-/** V4 performance_metrics rows for the coins V3 covers, fields renamed, nothing derived. */
-export function normalizeV4Performance(raw) {
-  if (!raw || !Array.isArray(raw.performance)) return { ok: false, error: 'malformed response' };
-  const rows = raw.performance
-    .filter(r => r && V4_COINS.includes(String(r.asset_id || '').toUpperCase()))
-    .map(r => ({ coin: String(r.asset_id).toUpperCase(), horizon: r.horizon ?? null, regime: r.regime ?? 'ALL',
-      status: r.status ?? null, samples: Number.isFinite(r.samples) ? r.samples : null,
-      winRate: Number.isFinite(r.win_rate) ? r.win_rate : null }));
-  return { ok: true, rows };
-}
-
-export async function fetchV4Performance({ apiBase = V4_API_BASE } = {}) {
-  const r = await getJson(`${apiBase}/api/performance`);
-  return r.ok ? normalizeV4Performance(r.body) : r;
 }

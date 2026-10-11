@@ -927,62 +927,61 @@
   }
 </style>
 <style>
-  /* ---- V3 research dashboard (dark, card-based; scoped to .rd) ---- */
-  .rd { --rd-bg:#0B1220; --rd-card:#111A2E; --rd-line:#22304D; --rd-text:#E6EDF7; --rd-mute:#8A99B4; --rd-blue:#3B82F6;
-        --rd-good:#22C55E; --rd-bad:#F05252; --rd-warn:#F5B942; background:var(--rd-bg); color:var(--rd-text);
-        border-radius:20px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.4; }
+  /* ---- Lab research tabs (ui/research-dashboard.js); same tokens and card style as the rest of V3 ---- */
+  .rd { font-size:13px; line-height:1.45; color:var(--color-text); }
   .rd p { margin:0; }
-  .rd-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
-  .rd-title { font-size:18px; font-weight:700; }
-  .rd-v3 { background:var(--rd-good); color:#05220F; font-size:11px; padding:1px 6px; border-radius:6px; vertical-align:middle; }
-  .rd-right { text-align:right; } .rd-small { font-size:12px; }
-  .rd-muted { color:var(--rd-mute); font-size:11px; }
-  .rd-tabs { display:flex; border-bottom:1px solid var(--rd-line); margin-bottom:12px; overflow-x:auto; }
-  .rd button { border:0; background:none; font:inherit; cursor:pointer; }
-  .rd-tabs button { flex:1; padding:8px 6px; color:var(--rd-mute); font-weight:600; font-size:13px; border-bottom:2px solid transparent; white-space:nowrap; }
-  .rd-tabs button.on { color:var(--rd-blue); border-bottom-color:var(--rd-blue); }
-  .rd-card { background:var(--rd-card); border:1px solid var(--rd-line); border-radius:14px; padding:12px; margin-bottom:10px; }
-  .rd-hero { display:flex; gap:12px; align-items:center; }
-  .rd-hero-icon { width:46px; height:46px; min-width:46px; border-radius:50%; border:3px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
-  .rd-hero-v { font-size:24px; font-weight:800; }
-  .rd-label { font-size:12px; color:var(--rd-mute); }
-  .rd-sub { color:#C4CEE0; font-size:12px; margin-top:4px !important; }
-  .rd-st-good { color:var(--rd-good); } .rd-st-bad { color:var(--rd-bad); } .rd-st-warn { color:var(--rd-warn); }
-  .rd-pos { color:var(--rd-good); } .rd-neg { color:var(--rd-bad); }
-  .rd-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
-  .rd-tile { background:var(--rd-card); border:1px solid var(--rd-line); border-radius:12px; padding:10px; min-width:0; }
-  .rd-tile-t { font-size:11px; color:var(--rd-mute); } .rd-tile-v { font-size:18px; font-weight:700; margin-top:2px !important; }
-  .rd-tile-s { font-size:10.5px; color:var(--rd-mute); margin-top:2px !important; overflow-wrap:anywhere; }
-  .rd-note-t { font-weight:700; font-size:13px; margin-bottom:4px !important; }
-  .rd-note-info { border-color:#2A4A7F; } .rd-note-warn { border-color:#7A5A12; background:#1D1A10; } .rd-note-good { border-color:#1F5F3A; background:#0F1D17; }
-  .rd-note ol { padding-left:18px; list-style:decimal; } .rd-list { padding-left:16px; list-style:disc; color:#C4CEE0; font-size:12px; }
+  .rd button { font:inherit; cursor:pointer; }
+  .rd-min0 { min-width:0; }
+  .rd-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; background:var(--color-card); border:1px solid var(--color-border); border-radius:12px; padding:4px; margin:16px 0 12px; }
+  .rd-tabs button { padding:8px 0; border-radius:8px; font-size:clamp(11px,3.3vw,13px); font-weight:600; letter-spacing:-0.01em; color:var(--color-text-secondary); background:transparent; border:0; white-space:nowrap; min-width:0; }
+  .rd-tabs button.on { background:var(--color-accent); color:#fff; }
+  .rd-card { background:var(--color-card); border:1px solid var(--color-border); border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:0 1px 2px rgba(0,0,0,.03); min-width:0; }
+  .rd-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--color-text-muted); margin-bottom:10px !important; }
+  .rd-label { font-size:11px; color:var(--color-text-muted); }
+  .rd-sub { color:var(--color-text-secondary); font-size:12.5px; margin-top:4px !important; overflow-wrap:anywhere; }
+  .rd-muted { color:var(--color-text-muted); font-size:11.5px; }
+  .rd-mb { margin-bottom:8px !important; } .rd-mt { margin-top:8px !important; } .rd-pad { padding:0 2px 8px; }
+  .rd-status { display:flex; gap:14px; align-items:flex-start; }
+  .rd-status-icon { width:44px; height:44px; min-width:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; }
+  .rd-status-v { margin:4px 0 2px !important; } .rd-status-v .status-badge { font-size:15px; padding:4px 12px; }
+  .status-error { background:#FDEDEC; color:#C0392B; border:1px solid #F5B7B1; }
+  .rd-badge { display:inline-block; font-size:11px; padding:2px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  .rd-badge-mute { background:var(--color-bg); color:var(--color-text-secondary); border:1px solid var(--color-border); }
+  .rd-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr)); gap:10px; }
+  .rd-metric { border:1px solid var(--color-border); border-radius:12px; padding:10px 12px; min-width:0; }
+  .rd-metric-t { font-size:11px; color:var(--color-text-muted); font-weight:600; }
+  .rd-metric-v { font-size:17px; font-weight:700; margin-top:2px !important; font-variant-numeric:tabular-nums; }
+  .rd-metric-s { font-size:11px; color:var(--color-text-muted); margin-top:3px !important; overflow-wrap:anywhere; }
+  .rd-pos { color:#27AE60; } .rd-neg { color:var(--color-bearish); }
+  .rd-list { padding-left:18px; list-style:disc; color:var(--color-text-secondary); font-size:12.5px; }
+  .rd-list li { margin:3px 0; overflow-wrap:anywhere; } .rd-ol { list-style:decimal; }
   .rd-row { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .rd-date { color:var(--rd-blue); font-weight:700; white-space:nowrap; }
-  .rd-h { font-weight:700; font-size:15px; margin-bottom:8px !important; }
-  .rd-seg, .rd-chips { display:flex; gap:6px; margin-bottom:10px; overflow-x:auto; padding-bottom:2px; }
-  .rd-seg, .rd-chips { flex-wrap:wrap; overflow-x:visible; }
-  .rd-seg button, .rd-chips button { background:#18233B; color:var(--rd-mute); border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; white-space:nowrap; }
-  .rd-seg button.on, .rd-chips button.on { background:var(--rd-blue); color:#fff; }
-  .rd-table { width:100%; border-collapse:collapse; font-size:12px; }
-  .rd-table th { text-align:left; color:var(--rd-mute); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--rd-line); }
-  .rd-table td { padding:6px 4px; border-bottom:1px solid #18233B; vertical-align:top; overflow-wrap:anywhere; }
-  .rd-kv td:first-child { color:var(--rd-mute); width:38%; }
-  .rd-cat td { color:var(--rd-blue); font-weight:700; padding-top:10px; }
-  .rd-scroll { overflow-x:auto; } .rd-factors td, .rd-factors th { white-space:nowrap; overflow-wrap:normal; }
-  .rd-foot { color:var(--rd-mute); font-size:11px; margin-top:8px !important; }
-  .rd-badge { font-size:11px; font-weight:700; border-radius:8px; padding:2px 8px; max-width:100%; }
-  .rd-exp .rd-row { flex-wrap:wrap; }
-  .rd-b-good { background:#14532D; color:#86EFAC; } .rd-b-bad { background:#5B1A1A; color:#FCA5A5; } .rd-b-warn { background:#5A4210; color:#FCD34D; }
-  .rd-b-info { background:#1E3A6E; color:#93C5FD; } .rd-b-mute { background:#273349; color:#B6C2D6; }
-  .rd-exp-t { font-weight:700; font-size:14px; }
-  .rd-bar { height:6px; background:#22304D; border-radius:4px; overflow:hidden; margin:8px 0 2px; flex:1; }
-  .rd-bar span { display:block; height:100%; background:var(--rd-blue); border-radius:4px; }
-  .rd-barrow { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px; }
-  .rd-barrow > span:first-child { width:42%; } .rd-barrow > span:last-child { width:36px; text-align:right; } .rd-barrow .rd-bar { margin:0; }
-  .rd-group { color:var(--rd-mute); font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin:14px 2px 6px !important; }
-  .rd-pad { padding:0 2px 6px; }
-  .rd-details summary { cursor:pointer; color:var(--rd-blue); font-size:12px; margin-top:6px; }
-  .rd-legacy-toggle { margin:-6px 0 16px; } .rd-legacy-toggle button { width:100%; text-align:left; padding:10px 14px; border-radius:12px; background:#111A2E; color:#93C5FD; font-weight:600; font-size:13px; }
+  .rd-wrap { flex-wrap:wrap; }
+  .rd-date { color:var(--color-accent); font-weight:700; white-space:nowrap; font-size:14px; }
+  .rd-seg { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .rd-seg button { background:var(--color-bg); border:1px solid var(--color-border); color:var(--color-text-secondary); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; }
+  .rd-seg button.on { background:var(--color-accent); border-color:var(--color-accent); color:#fff; }
+  .rd-table { width:100%; border-collapse:collapse; font-size:12.5px; table-layout:fixed; }
+  .rd-table th { text-align:left; color:var(--color-text-muted); font-weight:600; font-size:11px; padding:6px 4px; border-bottom:1px solid var(--color-border); }
+  .rd-table td { padding:7px 4px; border-bottom:1px solid #EEF1F5; vertical-align:top; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+  .rd-table th:first-child, .rd-table td:first-child { width:22%; font-weight:600; }
+  .rd-foot { color:var(--color-text-muted); font-size:11px; margin-top:10px !important; overflow-wrap:anywhere; }
+  .rd-kv { display:grid; grid-template-columns:minmax(0,38%) minmax(0,1fr); gap:5px 10px; margin:8px 0 0; font-size:12.5px; }
+  .rd-kv dt { color:var(--color-text-muted); font-size:11.5px; } .rd-kv dd { margin:0; overflow-wrap:anywhere; color:var(--color-text); }
+  .rd-exp-t, .rd-src-t { font-weight:700; font-size:14px; min-width:0; overflow-wrap:anywhere; }
+  .rd-bar { height:6px; background:#EDF1F6; border-radius:4px; overflow:hidden; margin:8px 0 4px; }
+  .rd-bar span { display:block; height:100%; background:var(--color-accent); border-radius:4px; }
+  .rd-cat { padding:8px 0; border-top:1px solid #EEF1F5; } .rd-cat:first-of-type { border-top:0; }
+  .rd-cat-t { font-weight:600; } .rd-cat-v { font-size:12px; color:var(--color-text-secondary); white-space:nowrap; }
+  .rd-group { color:var(--color-text-muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin:16px 2px 8px !important; }
+  .rd-src-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:10px; margin-bottom:4px; }
+  .rd-src { background:var(--color-card); border:1px solid var(--color-border); border-radius:14px; padding:12px; min-width:0; }
+  .rd-src-off { background:#FBFCFD; }
+  .rd-details { margin-top:10px; } .rd-details summary { cursor:pointer; color:var(--color-accent); font-size:12px; font-weight:600; }
+  .rd-details-body { margin-top:6px; }
+  .rd-pre { background:var(--color-bg); border:1px solid var(--color-border); border-radius:8px; padding:8px; font-size:10.5px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:260px; overflow:auto; margin-top:8px; }
+  .rd-legacy-toggle { margin:0 0 16px; }
+  .rd-legacy-toggle button { width:100%; text-align:left; padding:10px 14px; border-radius:12px; background:var(--color-card); border:1px solid var(--color-border); color:var(--color-accent); font-weight:600; font-size:13px; }
 </style>
 </head>
 <body class="bg-[#F8F9FA] text-[#1A1A2E] min-h-screen pb-20 md:pb-8">
@@ -1410,8 +1409,8 @@
   <!-- selection. Data loads on tab-open and on the header Refresh button   -->
   <!-- only — no auto-polling. -->
   <div id="view-lab" class="hidden">
-    <!-- Research dashboard (ui/research-dashboard.js): Overview / Performance / Experiments / Factors -->
-    <div id="researchDashboard" class="rd mt-4"></div>
+    <!-- Lab research tabs (ui/research-dashboard.js): Overview / Performance / Experiments / Factors -->
+    <div id="researchDashboard" class="rd"></div>
     <div id="labLegacyToggleWrap" class="rd-legacy-toggle hidden">
       <button id="labLegacyToggle" type="button" onclick="toggleLabLegacy()">▸ Technical details — full experiment panels</button>
     </div>
@@ -1611,7 +1610,7 @@
   window.PulseAPI = { ...PulseWorker, ...Validation, labelVariant };
   window.Research = Research;
   window.Comparison = Comparison;
-  // Research dashboard: read-only fetchers (V2 via PulseWorker, V1/V4 via api/sources.js).
+  // Lab research tabs: read-only fetchers (V2 via PulseWorker, V1 via api/sources.js).
   const rdRoot = document.getElementById('researchDashboard');
   if (rdRoot) {
     window.ResearchDashboard = mountResearchDashboard(rdRoot, {
@@ -1622,7 +1621,6 @@
         v1Latest: () => Sources.fetchV1Latest(),
         adaptation: () => Sources.fetchV1WeightAdaptation(),
         hloi: () => Sources.fetchV1HlOi(),
-        v4: () => Sources.fetchV4Performance(),
       },
       onTab: (tab) => {
         const wrap = document.getElementById('labLegacyToggleWrap');
