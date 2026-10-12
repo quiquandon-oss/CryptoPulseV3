@@ -17,6 +17,7 @@ import * as Ev from '../api/evaluation.js';
 import { formatEtaText, registryTitle } from '../api/research.js';
 import * as DQ from '../api/dataquality.js';
 import * as C from '../api/controls.js';
+import * as P from '../api/pool.js';
 import { renderControls, renderExecutionTile, summarizeModelChange } from './research-controls.js';
 
 export const COINS = ['BTC', 'ETH', 'LINK'];
@@ -104,6 +105,8 @@ export function buildModel(d, now = Date.now(), opts = {}) {
       hloi: !hloi ? (d.hloi && d.hloi.error) || 'not loaded' : null,
     },
     groups: Ev.groupExperiments(experiments),
+    poolSummary: P.summarizePool(experiments),
+    evalDims: d.registry && d.registry.ok ? d.registry.evaluation_dimensions || null : null,
     combined: Ev.combinedFactorCard(adaptation),
     factors,
     reconstructed: Ev.reconstructedComposite(factors),
@@ -197,6 +200,7 @@ export function renderOverview(m, ctx = {}) {
     ${metric('Calibration (Brier skill)', skill == null ? INSUF : `${skill >= 0 ? '+' : ''}${esc((skill * 100).toFixed(1))}%`, skill == null ? 'Needs ≥10 resolved per series' : `vs climatology on ${calN} resolved · >0 is better than the base rate`)}
     ${metric('Resolved / pending', `${p.resolved} / ${p.pending}`, `${p.scheduled.n} scheduled · ${p.live.n} live-fallback resolved`)}
   </div>${failed.length ? `<p class="rd-foot">Unavailable series: ${esc(failed.map(c => `${lbl(c)} (${c.error})`).join(', '))}.</p>` : ''}`)}
+  ${renderPoolOverview(m)}
   ${section('What changed?', `<p class="rd-muted rd-mb">Compared with the evaluation as of 24 h ago, rebuilt from the same records.</p><ul class="rd-list">${m.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`, 'rd-note-info')}
   ${section('What should we do next?', m.actions.length
     ? `<ol class="rd-list rd-ol">${m.actions.map(a => `<li>${a.kind === 'blocker' ? '<b>Blocker.</b> ' : ''}${esc(a.text)}</li>`).join('')}</ol>`
@@ -251,27 +255,170 @@ function resultLine(e) {
   return typeof r === 'string' && r && r !== 'NOT_AVAILABLE' ? r : null;
 }
 
-export function renderExperimentCard(e) {
+// Standalone outcome and pool contribution are two separate dimensions (api/pool.js): each has its own badge,
+// its own section and its own history. No combined badge exists, and neither is inferred from the other.
+const SA_CLS = { EVALUATED: 'status-ok', BLOCKED: 'status-error', INCOMPLETE: 'status-warning', NOT_RUN: 'rd-badge-mute', NOT_REPORTED: 'rd-badge-mute' };
+const OUT_CLS = { SUPPORTED: 'rd-pos', NOT_SUPPORTED: 'rd-neg', INCONCLUSIVE: 'tone-warn', NOT_APPLICABLE: 'rd-muted', NONE: 'rd-muted' };
+const POOL_CLS = { VALIDATED_INCREMENTAL_VALUE: 'status-ok', REDUNDANT: 'rd-badge-mute', DEGRADING: 'status-error', INCONCLUSIVE: 'status-warning',
+  BLOCKED: 'status-error', CANDIDATE: 'status-neutral', NOT_TESTED: 'rd-badge-mute', NOT_REPORTED: 'rd-badge-mute' };
+const REPO_BLOB = 'https://github.com/quiquandon-oss/PulseWorkerV2/blob/main/';
+const day = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : '—');
+const winTxt = (w) => (w && Number.isFinite(w.start_ts) && Number.isFinite(w.end_ts) ? `${day(w.start_ts)} → ${day(w.end_ts)}` : 'Not defined');
+const oosTxt = (v) => (v === true ? 'Out-of-sample' : v === false ? 'In-sample' : 'Not designated');
+const json = (o) => (o && typeof o === 'object' && Object.keys(o).length ? `<code>${esc(JSON.stringify(o))}</code>` : '<span class="rd-muted">Not measured</span>');
+
+/** A reference as a link when it is a GitHub URL or a plain repository path; otherwise plain text. */
+export function refLink(ref) {
+  const r = String(ref || '').trim();
+  if (/^https:\/\/github\.com\/quiquandon-oss\/[\w.-]+\/[\w./#?=&-]*$/.test(r)) return `<a class="rd-link" href="${esc(r)}" target="_blank" rel="noopener">${esc(r.replace('https://github.com/quiquandon-oss/', ''))}</a>`;
+  const path = r.split(' ')[0];
+  if (/^\.?[\w-]+(\/[\w.-]+)+$/.test(path) && !path.includes('..')) return `<a class="rd-link" href="${esc(REPO_BLOB + path)}" target="_blank" rel="noopener">${esc(r)}</a>`;
+  return esc(r);
+}
+const refList = (refs) => (refs && refs.length ? `<ul class="rd-list">${refs.map(r => `<li>${refLink(r)}</li>`).join('')}</ul>` : '<span class="rd-muted">None recorded</span>');
+
+function standaloneSummary(sv) {
+  const c = sv.current;
+  const reason = !sv.reported ? (sv.legacy_conclusion ? `Text assessment only: ${sv.legacy_conclusion}` : 'The registry reports no structured standalone evaluation for this experiment.')
+    : c ? c.reason : 'No standalone evaluation recorded.';
+  return `<section class="rd-dim" aria-label="Standalone evaluation">
+    <p class="rd-dim-h">Standalone</p>
+    <div class="rd-row rd-wrap">${badge(P.STANDALONE_STATUS_LABEL[sv.status] || sv.status, SA_CLS[sv.status] || 'rd-badge-mute')}<span class="${OUT_CLS[sv.outcome] || ''}">${esc(P.STANDALONE_OUTCOME_LABEL[sv.outcome] || sv.outcome)}</span></div>
+    <p class="rd-dim-s">${esc(firstSentence(reason))}</p>
+  </section>`;
+}
+
+function poolSummaryHtml(pv) {
+  const c = pv.current;
+  const reason = !pv.reported ? 'The registry does not report pool contribution for this experiment.' : c ? c.reason : 'No pool-contribution evaluation exists.';
+  return `<section class="rd-dim" aria-label="Pool contribution">
+    <p class="rd-dim-h">Pool contribution</p>
+    <div class="rd-row rd-wrap">${badge(P.POOL_STATE_LABEL[pv.state] || pv.state, POOL_CLS[pv.state] || 'rd-badge-mute')}</div>
+    <p class="rd-dim-s">${esc(pv.eligibility)}. ${esc(firstSentence(reason))}</p>
+  </section>`;
+}
+
+function standaloneDetail(e, sv) {
+  const c = sv.current;
+  if (!sv.reported) return `<p class="rd-sub">${sv.legacy_conclusion ? `Text assessment (no structured record): ${esc(sv.legacy_conclusion)}` : 'Not reported by the registry: no structured standalone evaluation exists yet.'}</p>
+    ${kv([['Frozen hypothesis', esc(e.success_criterion || '—')], ['Baseline', esc(e.baseline || '—')]])}`;
+  if (!c) return '<p class="rd-sub">No standalone evaluation recorded.</p>';
+  const staleNote = Number.isFinite(e.data_last_updated) && e.data_last_updated > c.recorded_ts
+    ? `<p class="rd-foot">New data has arrived since this record (${esc(dt(c.recorded_ts))}; data last updated ${esc(dt(e.data_last_updated))}). The record is not re-evaluated automatically.</p>` : '';
+  return `${kv([
+    ['Status', esc(P.STANDALONE_STATUS_LABEL[c.evaluation_status])],
+    ['Scientific outcome', esc(P.STANDALONE_OUTCOME_LABEL[c.scientific_outcome || 'NONE'])],
+    ['Reason', esc(c.reason)],
+    ['Frozen hypothesis', esc(e.success_criterion || '—')],
+    ['Protocol reference', `${refLink(c.spec_ref)}${c.spec_sha256 ? `<br><span class="rd-muted">spec sha256 <code>${esc(c.spec_sha256)}</code></span>` : ''}${c.plan_sha256 ? `<br><span class="rd-muted">plan sha256 <code>${esc(c.plan_sha256)}</code></span>` : '<br><span class="rd-muted">No frozen evaluation-plan hash recorded</span>'}`],
+    ['Baseline', esc(c.baseline || e.baseline || '—')],
+    ['Observed metrics', json(c.metrics)],
+    ['Sample', c.sample ? `${c.sample.count == null ? '<span class="rd-muted">not evaluated</span>' : esc(c.sample.count)}${c.sample.required != null ? ` of ${esc(c.sample.required)} required` : ''}${c.sample.meaning ? `<br><span class="rd-muted">${esc(c.sample.meaning)}</span>` : ''}` : '<span class="rd-muted">Not reported</span>'],
+    ['Evaluation window', `${esc(winTxt(c.window))} · ${esc(oosTxt(c.out_of_sample))}`],
+    ['Uncertainty', json(c.uncertainty)],
+    ['Checks', c.checks.length ? `<ul class="rd-list">${c.checks.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<span class="rd-muted">None recorded</span>'],
+    ['Limitations', c.limitations.length ? `<ul class="rd-list">${c.limitations.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<span class="rd-muted">None recorded</span>'],
+    ['Evaluator', esc(c.evaluator_version || 'No evaluator version (not run)')],
+    ['Evidence', refList(c.evidence_refs)],
+  ])}${staleNote}`;
+}
+
+function poolDetail(pv) {
+  const c = pv.current;
+  const comp = pv.component;
+  const compRows = [['Component', comp ? `${esc(comp.component_id || '—')}${comp.description ? `<br><span class="rd-muted">${esc(comp.description)}</span>` : ''}` : '<span class="rd-muted">No component defined</span>'],
+    ['Component provenance', esc(comp && comp.provenance || '—')]];
+  if (!pv.reported) return `<p class="rd-sub">Not reported by the registry.</p>${kv(compRows)}`;
+  if (!c) return `<p class="rd-sub">No pool-contribution evaluation exists (Not tested).</p>${kv(compRows)}`;
+  const measured = P.CONCLUSIVE_POOL_STATES.has(c.pool_state) || c.pool_state === 'INCONCLUSIVE';
+  const el = c.eligible || {};
+  return `${kv([
+    ['Status', esc(P.POOL_STATE_LABEL[c.pool_state])],
+    ['Explanation', esc(c.reason)],
+    ...(c.claimed_state ? [['Rejected claim', `<span class="rd-neg">${esc(P.POOL_STATE_LABEL[c.claimed_state] || c.claimed_state)}</span> — not accepted`]] : []),
+    ...compRows,
+    ['Pool', c.pool ? `${esc(c.pool.pool_id || '—')} · version ${esc(c.pool.version || '—')}` : '<span class="rd-muted">No pool defined yet</span>'],
+    ['Protocol', c.protocol ? `${esc(c.protocol.protocol_id || '—')}${c.protocol.sha256 ? `<br><span class="rd-muted">sha256 <code>${esc(c.protocol.sha256)}</code></span>` : ''}` : '<span class="rd-muted">No approved pool protocol</span>'],
+    ['Baseline pool vs with component', measured ? `${json(c.baseline_metrics)} → ${json(c.candidate_metrics)}` : '<span class="rd-muted">Not measured</span>'],
+    ['Incremental difference', measured ? json(c.incremental) : '<span class="rd-muted">Not measured</span>'],
+    ['Uncertainty', measured ? json(c.uncertainty) : '<span class="rd-muted">Not measured</span>'],
+    ['Eligible sample / overlap', measured ? `baseline ${esc(el.baseline_n ?? '—')} · with component ${esc(el.candidate_n ?? '—')} · overlap ${esc(el.overlap_n ?? '—')}${el.composition_change ? `<br><span class="rd-muted">${esc(el.composition_change)}</span>` : ''}` : '<span class="rd-muted">Not measured</span>'],
+    ['Evaluation window', `${esc(winTxt(c.window))} · ${esc(oosTxt(c.out_of_sample))}`],
+    ['Evaluator', esc(c.evaluator_version || '—')],
+    ['Evidence', refList(c.evidence_refs)],
+  ])}<p class="rd-foot">${measured ? 'Measured under the cited protocol.' : c.pool_state === 'CANDIDATE' ? 'Eligibility is a designation, not a measurement. There is no run action: a pool test needs an approved, frozen pool protocol first.' : 'No measured pool result.'}</p>`;
+}
+
+function historyDetail(sv, pv) {
+  const row = (dim, r, label) => `<li><b>${esc(dim)}</b> · ${esc(day(r.recorded_ts))} · ${esc(label)}${r.claimed_state ? ` <span class="rd-neg">(claimed ${esc(r.claimed_state)}, rejected)</span>` : ''} <span class="rd-muted">· ${esc(r.recorded_by)} · ${esc(r.record_source || 'registry')} · ${esc(r.record_id)}</span></li>`;
+  const items = [
+    ...sv.history.map(r => ({ ts: r.recorded_ts, html: row('Standalone', r, `${P.STANDALONE_STATUS_LABEL[r.evaluation_status]}${r.scientific_outcome ? ` / ${P.STANDALONE_OUTCOME_LABEL[r.scientific_outcome]}` : ''}`) })),
+    ...pv.history.map(r => ({ ts: r.recorded_ts, html: row('Pool', r, P.POOL_STATE_LABEL[r.pool_state]) })),
+  ].sort((a, b) => a.ts - b.ts);
+  const rejected = [...sv.rejected.map(x => ['Standalone', x]), ...pv.rejected.map(x => ['Pool', x])];
+  return `${items.length ? `<ul class="rd-list">${items.map(i => i.html).join('')}</ul>` : '<p class="rd-sub">No recorded evaluations.</p>'}
+    ${rejected.length ? `<p class="rd-sub rd-neg">${rejected.length} malformed record${rejected.length === 1 ? '' : 's'} ignored:</p><ul class="rd-list">${rejected.map(([d, x]) => `<li>${esc(d)}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}
+    <p class="rd-foot">Records are append-only; a later record never rewrites an earlier one, and a pool record never changes the standalone outcome. ${sv.reported ? '' : 'Standalone: not reported by the registry. '}${pv.reported ? '' : 'Pool: not reported by the registry.'}</p>`;
+}
+
+export function renderExperimentCard(e, { protocols = P.APPROVED_POOL_PROTOCOLS } = {}) {
   const st = Ev.experimentStage(e);
+  const sv = P.standaloneView(e);
+  const pv = P.poolView(e, protocols);
   const hasProgress = Number.isFinite(e.progress_count) && Number.isFinite(e.required_sample) && e.required_sample > 0;
   const prog = hasProgress ? Math.min(1, e.progress_count / e.required_sample) : null;
   const sample = hasProgress ? `${e.progress_count} / ${e.required_sample}` : Number.isFinite(e.progress_count) ? `${e.progress_count} (no required sample set)` : 'Not reported';
   const result = resultLine(e);
   const eta = e.eta && e.eta.estimable && e.eta.reached ? 'Sample threshold met — eligible for evaluation, not a result'
     : e.eta && e.eta.estimable && e.eta.eta_date ? formatEtaText(e.eta) : 'Not yet estimable';
-  return `<article class="rd-card rd-exp">
+  const win = sv.current ? winTxt(sv.current.window) : 'Not defined';
+  const links = [sv.current && sv.current.spec_ref ? `Specification: ${refLink(sv.current.spec_ref)}` : null,
+    sv.current && sv.current.evidence_refs.length ? `Evidence: ${refLink(sv.current.evidence_refs[sv.current.evidence_refs.length - 1])}` : null,
+    pv.current && pv.current.evidence_refs.length ? `Pool test: ${refLink(pv.current.evidence_refs[0])}` : 'Pool test: none yet'].filter(Boolean);
+  return `<article class="rd-card rd-exp" aria-label="${esc(registryTitle(e))}">
     <div class="rd-row rd-wrap"><p class="rd-exp-t">${esc(registryTitle(e))}</p>${badge(st.label, STAGE_CLS[st.key] || 'rd-badge-mute')}</div>
     <p class="rd-sub">${esc(firstSentence(e.research_question))}</p>
+    <div class="rd-dims">${standaloneSummary(sv)}${poolSummaryHtml(pv)}</div>
     ${kv([
       ['Result vs baseline', result ? esc(result) + (e.baseline ? ` <span class="rd-muted">(baseline: ${esc(e.baseline)})</span>` : '') : `<span class="rd-muted">Not yet evaluated${e.baseline ? ` (baseline: ${esc(e.baseline)})` : ''}</span>`],
       ['Evidence', `${esc(String(e.confidence_evidence_maturity || 'UNKNOWN').replace(/_/g, ' ').toLowerCase())} · samples ${esc(sample)}`],
+      ['Evaluation window', esc(win)],
       ...(e.conclusion ? [['Assessment', esc(e.conclusion)]] : []),
       ['Next action', esc(e.next_action)],
       ['ETA', esc(eta)],
     ])}
     ${prog == null ? '' : `<div class="rd-bar" aria-hidden="true"><span style="width:${(prog * 100).toFixed(0)}%"></span></div>`}
+    <p class="rd-foot rd-links">${links.join(' · ')}</p>
+    ${details('Standalone evaluation', standaloneDetail(e, sv))}
+    ${details('Pool contribution', poolDetail(pv))}
+    ${details('History & governance', historyDetail(sv, pv))}
     ${details('Technical details', `${kv([['Operational status', esc(Ev.operationalStatus(e))], ['Success criterion', esc(e.success_criterion)], ['Out-of-sample', esc(typeof e.oos_result === 'object' ? JSON.stringify(e.oos_result) : e.oos_result)], ['Data last updated', esc(dt(e.data_last_updated))], ['References', esc(e.github_refs || '—')], ['Live error', esc(e.live_error || '—')]])}<pre class="rd-pre">${esc(JSON.stringify(e, null, 2))}</pre>`)}
   </article>`;
+}
+
+/** Overview: the two dimensions counted separately. Candidates are never counted as contributors. */
+export function renderPoolOverview(m) {
+  const s = m.poolSummary;
+  if (!s || !m.experiments.length) return '';
+  const sa = { EVALUATED: 0, BLOCKED: 0, INCOMPLETE: 0, NOT_RUN: 0, NOT_REPORTED: 0 };
+  for (const e of m.experiments) sa[P.standaloneView(e).status] += 1;
+  const c = s.counts;
+  const dims = m.evalDims;
+  const dimNote = !s.reported ? 'The registry does not report pool contribution yet (older registry version).'
+    : dims && dims.tables === 'NOT_PRESENT' ? 'Pool and standalone records come from the registry code only: the evaluation tables (migration 0022) are not applied.'
+    : dims && dims.tables === 'UNAVAILABLE' ? `Stored evaluation records could not be read (${dims.error || 'unknown error'}); only code-defined records are shown.` : '';
+  return section('Standalone vs pool contribution', `<div class="rd-grid">
+    ${metric('Standalone evaluations', `${sa.EVALUATED} evaluated`, `${sa.BLOCKED} blocked · ${sa.INCOMPLETE} incomplete · ${sa.NOT_RUN} not run · ${sa.NOT_REPORTED} not reported`)}
+    ${metric('Pool contribution', `${c.VALIDATED_INCREMENTAL_VALUE} validated`, `${c.CANDIDATE} candidate${c.CANDIDATE === 1 ? '' : 's'} (not evidence of value) · ${c.REDUNDANT} redundant · ${c.DEGRADING} degrading · ${c.INCONCLUSIVE} inconclusive · ${c.BLOCKED} blocked · ${c.NOT_TESTED} not tested`)}
+  </div><p class="rd-foot">Counted from registry records; this summary rests on incomplete evidence. ${s.approvedProtocols ? '' : 'No pool protocol is approved, so no component can be validated yet. '}${s.rejected ? `${s.rejected} pool claim${s.rejected === 1 ? '' : 's'} rejected for missing or inconsistent evidence. ` : ''}${esc(dimNote)}</p>`);
+}
+
+/** Factors: pool relationships of registered components, labelled as such (no ranking, no estimated value). */
+export function renderPoolRelationships(m) {
+  const rows = m.experiments.map(e => ({ e, pv: P.poolView(e) })).filter(x => x.pv.component);
+  if (!rows.length) return '';
+  return section('Pool relationships', `<ul class="rd-list">${rows.map(({ e, pv }) => `<li><b>${esc(e.experiment_id)}</b> · ${esc(pv.component.component_id || '—')} — ${badge(P.POOL_STATE_LABEL[pv.state] || pv.state, POOL_CLS[pv.state] || 'rd-badge-mute')}<br><span class="rd-muted">${esc(pv.component.provenance || '')}</span></li>`).join('')}</ul>
+    <p class="rd-foot">Listed in registry order, not ranked. A candidate is eligible for a future pool test; it is not a validated contributor, and the figures above are not evidence of pool value.</p>`);
 }
 
 export function renderCombinedCard(c) {
@@ -293,7 +440,7 @@ export function renderExperiments(m, filter = 'all') {
   return `${seg}${groups.map(g => `
     <p class="rd-group">${esc(g.title)}</p>
     ${g.key === 'combined' ? renderCombinedCard(m.combined) : ''}
-    ${g.items.length ? g.items.map(renderExperimentCard).join('') : g.key === 'combined' ? '' : '<p class="rd-muted rd-pad">No registered experiment in this group.</p>'}`).join('')}`;
+    ${g.items.length ? g.items.map(e => renderExperimentCard(e)).join('') : g.key === 'combined' ? '' : '<p class="rd-muted rd-pad">No registered experiment in this group.</p>'}`).join('')}`;
 }
 
 // ---- Factors --------------------------------------------------------------------
@@ -338,6 +485,7 @@ export function renderFactors(m) {
   ${section('Factor categories', `<p class="rd-muted rd-mb">${reading}</p>${summary}
     <p class="rd-foot">Configured weight comes from V1's defaults. Effective share renormalises weight × confidence over the sources present in the latest reading (V1's own composite arithmetic). Contribution is the points each source supplied to that reading. None of these is evidence of predictive value.</p>`)}
   ${m.factors.map(c => `<p class="rd-group">${esc(c.title)}</p><div class="rd-src-grid">${c.rows.map(renderSourceCard).join('')}</div>`).join('')}
+  ${renderPoolRelationships(m)}
   ${section('Measured predictive value', `<p class="rd-sub">Predictive value is V1's leave-one-out test: the change in V1's next-24h BTC directional hit rate with vs without the source, on at least ${pol.minSamples} spaced samples (in-sample). Incremental value to V3 predictions is not measured: V3 models do not consume V1 factors.</p>
     ${details('Weight-adaptation diagnostics (V1, read-only)', kv([
       ['Mode', esc(a.mode === 'active' ? 'Active' : 'Shadow — proposals never change V1 weights by themselves')],
