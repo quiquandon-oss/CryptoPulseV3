@@ -148,7 +148,9 @@ export async function fetchExperimentRegistry({ apiBase = API_BASE } = {}) {
       return { ok: false, error: raw?.error || 'malformed response' };
     }
     const experiments = raw.experiments.map(normalizeRegistryEntry).filter((e) => e.available);
-    return { ok: true, generated_ts: Number.isFinite(raw.generated_ts) ? raw.generated_ts : null, experiments };
+    const dims = raw.evaluation_dimensions && typeof raw.evaluation_dimensions === 'object' ? raw.evaluation_dimensions : null;
+    return { ok: true, generated_ts: Number.isFinite(raw.generated_ts) ? raw.generated_ts : null, experiments,
+      evaluation_dimensions: dims ? { tables: typeof dims.tables === 'string' ? dims.tables : null, error: typeof dims.error === 'string' ? dims.error : null } : null };
   } catch (e) {
     return { ok: false, error: describeError(e) };
   }

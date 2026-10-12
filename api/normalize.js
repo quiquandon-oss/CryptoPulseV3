@@ -267,6 +267,13 @@ export function normalizeRegistryEntry(raw) {
     eta: raw.eta && typeof raw.eta === 'object' ? raw.eta : null,
     suggested_status: raw.suggested_status ?? null,
     live_error: raw.live_error ?? null,
+    // Evaluation dimensions (PulseWorkerV2 migration 0022 + registry). Kept
+    // apart and passed through unchanged; api/pool.js validates them. Absent
+    // stays absent (undefined), so an older registry reads as "not reported"
+    // rather than as an empty history.
+    ...(Array.isArray(raw.standalone_evaluations) ? { standalone_evaluations: raw.standalone_evaluations } : {}),
+    ...(Array.isArray(raw.pool_evaluations) ? { pool_evaluations: raw.pool_evaluations } : {}),
+    ...(raw.pool_component && typeof raw.pool_component === 'object' && !Array.isArray(raw.pool_component) ? { pool_component: raw.pool_component } : {}),
   };
 }
 
