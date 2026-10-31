@@ -49,7 +49,7 @@ export function summarizeModelChange(prev, next) {
     ['Resolved predictions', (m) => m.pooled.resolved],
     ['Pending predictions', (m) => m.pooled.pending],
     ['Latest V2 persistence check', (m) => m.dataQuality.asOf],
-    ['Experiments eligible for evaluation', (m) => m.experiments.filter(e => e.suggested_status === 'READY_FOR_ANALYSIS').map(e => e.experiment_id).join(', ') || 'none'],
+    ['Experiments eligible for evaluation', (m) => m.experiments.filter(e => e.decision && e.decision.state ? e.decision.state === 'READY_FOR_EVALUATION' : e.suggested_status === 'READY_FOR_ANALYSIS').map(e => e.experiment_id).join(', ') || 'none'],
     ['Experiment data updates', (m) => m.experiments.map(e => `${e.experiment_id}:${e.data_last_updated ?? '-'}`).join('|')],
   ];
   const changed = [], unchanged = [];

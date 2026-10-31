@@ -18,6 +18,7 @@ import { formatEtaText, registryTitle } from '../api/research.js';
 import * as DQ from '../api/dataquality.js';
 import * as C from '../api/controls.js';
 import * as P from '../api/pool.js';
+import { decisionView } from '../api/decision.js';
 import { renderControls, renderExecutionTile, summarizeModelChange } from './research-controls.js';
 
 export const COINS = ['BTC', 'ETH', 'LINK'];
@@ -146,8 +147,9 @@ const STATUS_UI = {
   INSUFFICIENT_DATA: { tone: 'tone-info', icon: '…' },
   DATA_QUALITY: { tone: 'tone-bad', icon: '!' },
 };
-const STAGE_CLS = { eligible: 'status-neutral', evaluated: 'status-ok', collecting: 'status-warning', unavailable: 'status-error',
-  not_started: 'rd-badge-mute', inactive: 'rd-badge-mute', diagnostic: 'rd-badge-mute', unknown: 'rd-badge-mute' };
+const STAGE_CLS = { eligible: 'status-neutral', evaluated: 'status-warning', collecting: 'status-warning', unavailable: 'status-error',
+  not_started: 'rd-badge-mute', inactive: 'rd-badge-mute', diagnostic: 'rd-badge-mute', unknown: 'rd-badge-mute',
+  blocked: 'status-error', rejected: 'status-error', implemented_research: 'status-neutral', implemented_production: 'status-ok' };
 const badge = (label, cls) => `<span class="status-badge rd-badge ${cls}">${esc(label)}</span>`;
 const metric = (title, value, sub, cls = '') => `<div class="rd-metric${cls ? ' ' + cls : ''}"><p class="rd-metric-t">${esc(title)}</p><p class="rd-metric-v">${value}</p>${sub ? `<p class="rd-metric-s">${sub}</p>` : ''}</div>`;
 const section = (title, body, cls = '') => `<section class="rd-card${cls ? ' ' + cls : ''}"><p class="rd-h">${esc(title)}</p>${body}</section>`;
@@ -363,6 +365,9 @@ function historyDetail(sv, pv) {
 
 export function renderExperimentCard(e, { protocols = P.APPROVED_POOL_PROTOCOLS } = {}) {
   const st = Ev.experimentStage(e);
+  const dv = decisionView(e);
+  const decisionHtml = !dv.reported ? '<span class="rd-muted">Not reported by API (nothing inferred)</span>'
+    : `${esc(dv.owner)}${dv.proposal ? ` · <span class="rd-neg">${esc(dv.proposal.text)}</span>${dv.proposal.basis ? ` <span class="rd-muted">(${esc(dv.proposal.basis)})</span>` : ''}` : ''}${dv.production ? ` · <span class="${dv.production.warn ? 'rd-neg' : ''}">${esc(dv.production.text)}: ${esc(dv.production.where)}${dv.production.since ? ' since ' + esc(dv.production.since) : ''}${dv.production.ref ? ` <span class="rd-muted">(${esc(dv.production.ref)})</span>` : ''}</span>` : ''} <span class="rd-muted">· ${esc(dv.scope)}${dv.basis ? ' · ' + esc(dv.basis) : ''}</span>${dv.conflicts.map(c => `<br><span class="rd-neg">Registry conflict:</span> <span class="rd-muted">${esc(c)}</span>`).join('')}`;
   const sv = P.standaloneView(e);
   const pv = P.poolView(e, protocols);
   const hasProgress = Number.isFinite(e.progress_count) && Number.isFinite(e.required_sample) && e.required_sample > 0;
@@ -380,6 +385,7 @@ export function renderExperimentCard(e, { protocols = P.APPROVED_POOL_PROTOCOLS 
     <p class="rd-sub">${esc(firstSentence(e.research_question))}</p>
     <div class="rd-dims">${standaloneSummary(sv)}${poolSummaryHtml(pv)}</div>
     ${kv([
+      ['Decision', decisionHtml],
       ['Result vs baseline', result ? esc(result) + (e.baseline ? ` <span class="rd-muted">(baseline: ${esc(e.baseline)})</span>` : '') : `<span class="rd-muted">Not yet evaluated${e.baseline ? ` (baseline: ${esc(e.baseline)})` : ''}</span>`],
       ['Evidence', `${esc(String(e.confidence_evidence_maturity || 'UNKNOWN').replace(/_/g, ' ').toLowerCase())} · samples ${esc(sample)}`],
       ['Evaluation window', esc(win)],

@@ -274,6 +274,9 @@ export function normalizeRegistryEntry(raw) {
     ...(Array.isArray(raw.standalone_evaluations) ? { standalone_evaluations: raw.standalone_evaluations } : {}),
     ...(Array.isArray(raw.pool_evaluations) ? { pool_evaluations: raw.pool_evaluations } : {}),
     ...(raw.pool_component && typeof raw.pool_component === 'object' && !Array.isArray(raw.pool_component) ? { pool_component: raw.pool_component } : {}),
+    // Decision state (decision-state-v1, PulseWorkerV2 registry). Passed through unchanged; absent stays absent
+    // so api/decision.js shows "not reported" instead of inferring a state.
+    ...(raw.decision && typeof raw.decision === 'object' && !Array.isArray(raw.decision) ? { decision: raw.decision } : {}),
   };
 }
 

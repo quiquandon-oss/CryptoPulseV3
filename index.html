@@ -1646,10 +1646,12 @@
   import * as Comparison from './api/comparison.js';
   import * as Research from './api/research.js';
   import * as Sources from './api/sources.js';
+  import * as Decision from './api/decision.js';
   import { mountResearchDashboard } from './ui/research-dashboard.js';
   window.PulseAPI = { ...PulseWorker, ...Validation, labelVariant };
   window.Research = Research;
   window.Comparison = Comparison;
+  window.Decision = Decision;
   // Lab research tabs: read-only fetchers (V2 via PulseWorker, V1 via api/sources.js).
   const rdRoot = document.getElementById('researchDashboard');
   if (rdRoot) {
@@ -3486,6 +3488,7 @@ function renderRegistryCard(e, now = Date.now()) {
     ? `<span class="text-[#95A5A6] italic font-normal">${esc(e.expected_result)}</span>`
     : esc(e.expected_result);
   const conclusionText = e.conclusion ? esc(e.conclusion) : MUTED('Awaiting evidence');
+  const dv = window.Decision ? window.Decision.decisionView(e) : null;
   const fresh = Research.classifyDataFreshness(e.experiment_id, e.data_last_updated, now);
   const dataUpdated = fresh.state === 'none'
     ? MUTED('No live data source')
@@ -3505,6 +3508,7 @@ function renderRegistryCard(e, now = Date.now()) {
         <p class="text-xs uppercase tracking-wider text-[#718096] font-semibold">${esc(Research.registryTitle(e))}</p>
         <span class="status-badge ${badgeClassForStatus(e.status)}">${esc(Research.statusLabel(e.status))}</span>
         ${e.suggested_status ? `<span class="status-badge status-ok" title="Backend suggestion only; the stored status is unchanged.">Suggested: ${esc(Research.statusLabel(e.suggested_status))}</span>` : ''}
+        ${dv ? `<span class="status-badge ${dv.badge}" title="Decision state from the registry API; nothing is inferred here.">${esc(dv.label)}</span>${dv.proposal ? `<span class="status-badge status-warning">${esc(dv.proposal.text)}</span>` : ''}` : ''}
         <span class="status-badge status-neutral">${esc(e.experiment_type)}</span>
       </div>
       <button class="text-xs text-[#718096] hover:text-[#1A1A2E] border border-[#E2E8F0] rounded-md px-2 py-1 transition-colors" onclick="toggleNote(this,'${noteId}')">ⓘ Details</button>
@@ -3553,6 +3557,10 @@ function renderRegistryCard(e, now = Date.now()) {
       <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Conclusion</p>
       <p class="text-xs mt-0.5">${conclusionText}</p>
     </div>
+    ${dv ? `<div class="mt-2 p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E2E8F0]">
+      <p class="text-[0.6rem] uppercase tracking-wide text-[#718096] font-semibold">Decision</p>
+      <p class="text-xs mt-0.5">${dv.reported ? `${esc(dv.owner)}${dv.production ? ` · <span class="${dv.production.warn ? 'text-[#D68910] font-semibold' : ''}">${esc(dv.production.text)}: ${esc(dv.production.where)}</span>` : ''} · ${esc(dv.scope)}` : MUTED('Not reported by API (nothing inferred)')}</p>
+    </div>` : ''}
     <div class="mt-2 flex items-center justify-between flex-wrap gap-2">
       <span class="text-[0.65rem] text-[#718096]">Data updated: ${dataUpdated}</span>
     </div>
