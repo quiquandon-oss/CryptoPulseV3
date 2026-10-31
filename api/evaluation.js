@@ -288,9 +288,18 @@ export function groupExperiments(experiments) {
  * Stage of an experiment, from registry fields only (no parsing of free text).
  * A met sample threshold means eligible for evaluation, never success.
  */
+// decision-state-v1 (PulseWorkerV2 registry `decision`) -> stage keys used by the dashboard.
+export const DECISION_STAGE_KEY = {
+  COLLECTING: 'collecting', READY_FOR_EVALUATION: 'eligible', BLOCKED: 'blocked', EVALUATED_DECISION_PENDING: 'evaluated',
+  REJECTED: 'rejected', IMPLEMENTED_RESEARCH_ONLY: 'implemented_research', IMPLEMENTED_PRODUCTION: 'implemented_production',
+  PROPOSED: 'not_started', STAGING_ONLY: 'inactive', ON_DEMAND: 'diagnostic',
+};
+
 export function experimentStage(e) {
   if (!e) return { key: 'unknown', label: 'Unknown' };
   if (e.live_error) return { key: 'unavailable', label: 'Data unavailable' };
+  // The backend's decision state is authoritative when sent; the derivation below is only for older registries.
+  if (e.decision && e.decision.state) return { key: DECISION_STAGE_KEY[e.decision.state] || 'unknown', label: e.decision.label || e.decision.state, source: 'api' };
   if (e.conclusion) return { key: 'evaluated', label: 'Evaluated' };
   const st = String(e.status || '').toUpperCase();
   if (e.suggested_status === 'READY_FOR_ANALYSIS') return { key: 'eligible', label: 'Eligible for evaluation' };
