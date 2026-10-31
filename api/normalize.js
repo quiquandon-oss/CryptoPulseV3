@@ -219,9 +219,11 @@ export function normalizeTimesFmForecast(raw) {
 // least be a real object with the fields the registry's own field list
 // requires, and a missing/malformed row must surface as unavailable,
 // never be silently backfilled with a default.
+// expected_result and baseline are optional: the backend's code-defined entries (EXP-001-003, 011, 012, 023-028)
+// send null for them, and dropping those rows hid 11 of 18 experiments. A null stays null (shown as "—").
 const REGISTRY_REQUIRED_FIELDS = [
   'experiment_id', 'title', 'research_question', 'purpose', 'experiment_type',
-  'expected_result', 'success_criterion', 'status', 'baseline', 'next_action',
+  'success_criterion', 'status', 'next_action',
 ];
 
 /**
@@ -240,12 +242,12 @@ export function normalizeRegistryEntry(raw) {
     research_question: raw.research_question,
     purpose: raw.purpose,
     experiment_type: raw.experiment_type,
-    expected_result: raw.expected_result,
+    expected_result: raw.expected_result ?? null,
     success_criterion: raw.success_criterion,
     start_date: raw.start_date ?? null,
     target_date: raw.target_date ?? null,
     status: raw.status,
-    baseline: raw.baseline,
+    baseline: raw.baseline ?? null,
     required_sample: raw.required_sample ?? null,
     current_sample_size: raw.current_sample_size ?? 'NOT_AVAILABLE',
     current_measured_result: raw.current_measured_result ?? 'NOT_AVAILABLE',

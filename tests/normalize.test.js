@@ -16,10 +16,17 @@ test('normalizeRegistryEntry: missing row -> unavailable, not a fabricated defau
 });
 
 test('normalizeRegistryEntry: a row missing any required field is unavailable', () => {
-  for (const field of ['experiment_id', 'title', 'research_question', 'purpose', 'experiment_type', 'expected_result', 'success_criterion', 'status', 'baseline', 'next_action']) {
+  for (const field of ['experiment_id', 'title', 'research_question', 'purpose', 'experiment_type', 'success_criterion', 'status', 'next_action']) {
     const result = normalizeRegistryEntry(baseRegistryRow({ [field]: undefined }));
     assert.equal(result.available, false, `expected unavailable when ${field} is missing`);
   }
+});
+
+test('normalizeRegistryEntry: null expected_result and baseline (code-defined entries) stay available as null', () => {
+  const result = normalizeRegistryEntry(baseRegistryRow({ expected_result: null, baseline: null }));
+  assert.equal(result.available, true);
+  assert.equal(result.expected_result, null);
+  assert.equal(result.baseline, null);
 });
 
 test('normalizeRegistryEntry: a complete row passes through its real fields unmodified', () => {
