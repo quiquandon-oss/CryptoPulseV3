@@ -88,3 +88,16 @@ test('recorded production decision cites its reference, and registry conflicts a
   assert.match(html, /Registry conflict:/);
   assert.match(html, /stale &lt;PROPOSED&gt;/);
 });
+
+test('owner directives are listed per experiment, escaped, and never mark the experiment decided', async () => {
+  const v = decisionView({ decision: { state: 'BLOCKED', label: 'Blocked', owner_decided: false,
+    owner_directives: [{ id: 'H1', directive: 'STRUCTURAL_CHECK_ALLOWED', text: 'Structural checks only <b>', decided_ts: 1793404800000 }] } });
+  assert.deepEqual(v.directives, [{ id: 'H1', directive: 'STRUCTURAL CHECK ALLOWED', text: 'Structural checks only <b>', decided_ts: 1793404800000 }]);
+  assert.equal(v.decided, false);
+  assert.deepEqual(decisionView({ decision: { state: 'COLLECTING' } }).directives, []);
+  const { renderExperimentCard } = await import('../ui/research-dashboard.js');
+  const html = renderExperimentCard({ id: 'EXP-009', name: 'x', decision: { state: 'BLOCKED', label: 'Blocked', owner_decided: false,
+    owner_directives: [{ id: 'H1', directive: 'STRUCTURAL_CHECK_ALLOWED', text: 'Structural checks only <b>' }] } });
+  assert.match(html, /Owner directive H1 \(STRUCTURAL CHECK ALLOWED, not a decided outcome\)/);
+  assert.match(html, /Structural checks only &lt;b&gt;/);
+});
