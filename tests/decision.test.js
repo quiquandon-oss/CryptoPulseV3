@@ -73,3 +73,18 @@ test('dashboard card shows the decision row, proposal and production use; old re
   assert.match(prod, /Used in production, no decision recorded/);
   assert.match(renderExperimentCard({ ...base, status: 'ACCUMULATING' }), /Not reported by API/);
 });
+
+test('recorded production decision cites its reference, and registry conflicts are listed', async () => {
+  const v = decisionView({ decision: { state: 'BLOCKED', label: 'Blocked', owner_decided: false,
+    production_use: { where: 'V1 composite (hloi)', since: '2026-10-11', decision_recorded: true, decision_ref: 'V1 changelog 2026-10-11-hloi' },
+    conflicts: ['D1 registry status is PROPOSED, but collection has run since 2026-10-31.'] } });
+  assert.equal(v.production.text, 'Used in production (owner decision)');
+  assert.equal(v.production.warn, false);
+  assert.equal(v.production.ref, 'V1 changelog 2026-10-11-hloi');
+  assert.deepEqual(v.conflicts, ['D1 registry status is PROPOSED, but collection has run since 2026-10-31.']);
+  assert.deepEqual(decisionView({}).conflicts, []);
+  const { renderExperimentCard } = await import('../ui/research-dashboard.js');
+  const html = renderExperimentCard({ id: 'EXP-008', name: 'x', decision: { state: 'COLLECTING', label: 'Collecting', owner_decided: false, conflicts: ['stale <PROPOSED>'] } });
+  assert.match(html, /Registry conflict:/);
+  assert.match(html, /stale &lt;PROPOSED&gt;/);
+});
