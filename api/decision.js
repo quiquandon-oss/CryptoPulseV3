@@ -17,7 +17,7 @@ export function decisionView(entry) {
   const d = entry && entry.decision;
   if (!d || typeof d !== 'object' || !d.state) {
     return { reported: false, label: 'Decision: not reported by API', badge: 'status-neutral', decided: false,
-      basis: 'The registry predates decision-state-v1. Nothing is inferred.', owner: null, proposal: null, production: null, conflicts: [] };
+      basis: 'The registry predates decision-state-v1. Nothing is inferred.', owner: null, proposal: null, production: null, conflicts: [], directives: [] };
   }
   const decided = DECIDED.has(d.state) && !!d.owner_decided;
   const owner = d.owner_decision
@@ -31,10 +31,14 @@ export function decisionView(entry) {
         where: d.production_use.where || '', since: d.production_use.since || null, note: d.production_use.note || null,
         ref: d.production_use.decision_ref || null, warn: !d.production_use.decision_recorded }
     : null;
+  // Owner directives govern how an experiment proceeds; they are not a decided outcome and never set `decided`.
+  const directives = Array.isArray(d.owner_directives)
+    ? d.owner_directives.map((o) => ({ id: o.id || '', directive: String(o.directive || '').replace(/_/g, ' '), text: o.text || '', decided_ts: o.decided_ts || null }))
+    : [];
   const conflicts = Array.isArray(d.conflicts) ? d.conflicts.map(c => (typeof c === 'string' ? c : (c && (c.detail || c.field)) || JSON.stringify(c))) : [];
   return {
     reported: true, state: d.state, label: d.label || d.state, badge: DECISION_BADGE[d.state] || 'status-neutral',
-    decided, basis: d.basis || '', owner, proposal, production, conflicts,
+    decided, basis: d.basis || '', owner, proposal, production, conflicts, directives,
     scope: d.state === 'IMPLEMENTED_PRODUCTION' ? 'Production (owner decision)' : production ? 'Research, with production use outside the registry' : 'Research only',
     model: d.model_version || null,
   };
